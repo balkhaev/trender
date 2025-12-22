@@ -11,75 +11,57 @@ const BasicTokenRequestSchema = z
     deviceType: z
       .string()
       .openapi({ description: "Mobile platform name", example: "Android" }),
-    algorithm: z
-      .string()
-      .openapi({
-        description: "Hashing algorithm used for signature (if any)",
-        example: "HMAC-SHA256",
-      }),
-    timestamp: z
-      .string()
-      .openapi({
-        description: "Unix timestamp in milliseconds as string",
-        example: "1625097600000",
-      }),
-    installationHash: z
-      .string()
-      .openapi({
-        description: "Unique client-side generated device identifier",
-        example: "client_generated_hash",
-      }),
+    algorithm: z.string().openapi({
+      description: "Hashing algorithm used for signature (if any)",
+      example: "HMAC-SHA256",
+    }),
+    timestamp: z.string().openapi({
+      description: "Unix timestamp in milliseconds as string",
+      example: "1625097600000",
+    }),
+    installationHash: z.string().openapi({
+      description: "Unique client-side generated device identifier",
+      example: "client_generated_hash",
+    }),
   })
   .openapi("BasicTokenRequest");
 
 const AuthResponseSchema = z
   .object({
-    accessToken: z
-      .string()
-      .openapi({
-        description: "Short-lived JWT access token",
-        example: "eyJhbG...",
-      }),
-    refreshToken: z
-      .string()
-      .openapi({
-        description: "Long-lived JWT refresh token",
-        example: "eyJhbG...",
-      }),
-    expiresIn: z
-      .number()
-      .openapi({
-        description: "Access token lifetime in seconds",
-        example: 3600,
-      }),
+    accessToken: z.string().openapi({
+      description: "Short-lived JWT access token",
+      example: "eyJhbG...",
+    }),
+    refreshToken: z.string().openapi({
+      description: "Long-lived JWT refresh token",
+      example: "eyJhbG...",
+    }),
+    expiresIn: z.number().openapi({
+      description: "Access token lifetime in seconds",
+      example: 3600,
+    }),
   })
   .openapi("AuthResponse");
 
 const RefreshTokenRequestSchema = z
   .object({
-    refreshToken: z
-      .string()
-      .openapi({
-        description: "The refresh token obtained during initial authentication",
-        example: "eyJhbG...",
-      }),
+    refreshToken: z.string().openapi({
+      description: "The refresh token obtained during initial authentication",
+      example: "eyJhbG...",
+    }),
   })
   .openapi("RefreshTokenRequest");
 
 const RefreshTokenResponseSchema = z
   .object({
-    accessToken: z
-      .string()
-      .openapi({
-        description: "New short-lived JWT access token",
-        example: "eyJhbG...",
-      }),
-    expiresIn: z
-      .number()
-      .openapi({
-        description: "New access token lifetime in seconds",
-        example: 3600,
-      }),
+    accessToken: z.string().openapi({
+      description: "New short-lived JWT access token",
+      example: "eyJhbG...",
+    }),
+    expiresIn: z.number().openapi({
+      description: "New access token lifetime in seconds",
+      example: 3600,
+    }),
   })
   .openapi("RefreshTokenResponse");
 

@@ -2,6 +2,7 @@ import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import prisma from "@trender/db";
 import {
   ErrorResponseSchema,
+  ListQuerySchema,
   NotFoundResponseSchema,
   TemplateSchema,
   UnauthorizedResponseSchema,
@@ -9,12 +10,6 @@ import {
 import { isKlingConfigured } from "../services/kling";
 import { videoGenJobQueue } from "../services/queues";
 import { getReelVideoUrl } from "../services/s3";
-import {
-  TemplateSchema,
-  ErrorResponseSchema,
-  NotFoundResponseSchema,
-  UnauthorizedResponseSchema,
-} from "../schemas/openapi";
 
 // Schemas moved to centralized location
 
@@ -26,7 +21,7 @@ const listTemplatesRoute = createRoute({
   summary: "List templates",
   tags: ["Templates"],
   request: {
-    query: listQuerySchema,
+    query: ListQuerySchema,
   },
   responses: {
     200: {
