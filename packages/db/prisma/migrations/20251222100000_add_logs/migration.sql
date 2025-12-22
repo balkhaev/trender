@@ -1,11 +1,19 @@
 -- CreateEnum
-CREATE TYPE "LogLevel" AS ENUM ('debug', 'info', 'warn', 'error');
+DO $$ BEGIN
+    CREATE TYPE "LogLevel" AS ENUM ('debug', 'info', 'warn', 'error');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- CreateEnum
-CREATE TYPE "AIProvider" AS ENUM ('gemini', 'openai', 'kling');
+DO $$ BEGIN
+    CREATE TYPE "AIProvider" AS ENUM ('gemini', 'openai', 'kling');
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
 
 -- CreateTable
-CREATE TABLE "ReelLog" (
+CREATE TABLE IF NOT EXISTS "ReelLog" (
     "id" TEXT NOT NULL,
     "reelId" TEXT NOT NULL,
     "level" "LogLevel" NOT NULL,
@@ -19,7 +27,7 @@ CREATE TABLE "ReelLog" (
 );
 
 -- CreateTable
-CREATE TABLE "AILog" (
+CREATE TABLE IF NOT EXISTS "AILog" (
     "id" TEXT NOT NULL,
     "reelId" TEXT,
     "generationId" TEXT,
@@ -41,25 +49,29 @@ CREATE TABLE "AILog" (
 );
 
 -- CreateIndex
-CREATE INDEX "ReelLog_reelId_idx" ON "ReelLog"("reelId");
+CREATE INDEX IF NOT EXISTS "ReelLog_reelId_idx" ON "ReelLog"("reelId");
 
 -- CreateIndex
-CREATE INDEX "ReelLog_stage_idx" ON "ReelLog"("stage");
+CREATE INDEX IF NOT EXISTS "ReelLog_stage_idx" ON "ReelLog"("stage");
 
 -- CreateIndex
-CREATE INDEX "ReelLog_createdAt_idx" ON "ReelLog"("createdAt");
+CREATE INDEX IF NOT EXISTS "ReelLog_createdAt_idx" ON "ReelLog"("createdAt");
 
 -- CreateIndex
-CREATE INDEX "AILog_provider_idx" ON "AILog"("provider");
+CREATE INDEX IF NOT EXISTS "AILog_provider_idx" ON "AILog"("provider");
 
 -- CreateIndex
-CREATE INDEX "AILog_reelId_idx" ON "AILog"("reelId");
+CREATE INDEX IF NOT EXISTS "AILog_reelId_idx" ON "AILog"("reelId");
 
 -- CreateIndex
-CREATE INDEX "AILog_createdAt_idx" ON "AILog"("createdAt");
+CREATE INDEX IF NOT EXISTS "AILog_createdAt_idx" ON "AILog"("createdAt");
 
 -- CreateIndex
-CREATE INDEX "AILog_status_idx" ON "AILog"("status");
+CREATE INDEX IF NOT EXISTS "AILog_status_idx" ON "AILog"("status");
 
 -- AddForeignKey
-ALTER TABLE "ReelLog" ADD CONSTRAINT "ReelLog_reelId_fkey" FOREIGN KEY ("reelId") REFERENCES "Reel"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE "ReelLog" ADD CONSTRAINT "ReelLog_reelId_fkey" FOREIGN KEY ("reelId") REFERENCES "Reel"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN null;
+END $$;
