@@ -472,3 +472,37 @@ export async function getPipelineStatus(
 
   return response.json();
 }
+
+// ============================================
+// VIDEO TRIM API
+// ============================================
+
+export type TrimVideoRequest = {
+  video: File;
+  startTime: number;
+  endTime: number;
+};
+
+/**
+ * Trim video between startTime and endTime
+ * Returns trimmed video as Blob
+ */
+export async function trimVideo(request: TrimVideoRequest): Promise<Blob> {
+  const formData = new FormData();
+  formData.append("video", request.video);
+  formData.append("startTime", request.startTime.toString());
+  formData.append("endTime", request.endTime.toString());
+
+  const response = await fetch(`${API_URL}/api/trim`, {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const errorData = (await response.json()) as AnalyzeVideoError;
+    throw new Error(errorData.error || "Failed to trim video");
+  }
+
+  return response.blob();
+}

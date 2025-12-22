@@ -81,6 +81,7 @@ type InstaloaderMetadataResponse = {
   viewCount?: number | null;
   author?: string | null;
   thumbnailUrl?: string | null;
+  duration?: number | null;
   error?: string | null;
 };
 
@@ -237,8 +238,10 @@ async function downloadSingleVideo(
   reel: Reel,
   outputDir: string
 ): Promise<string> {
-  // Best-effort: fill metadata (views/comments/caption/author/thumb) before download.
+  // Best-effort: fill metadata (views/comments/caption/author/thumb/duration) before download.
   const meta = await fetchMetadataViaInstaloader(reel.id);
+  let metaDuration: number | null = null;
+
   if (meta?.success) {
     const data: {
       caption?: string;
@@ -247,6 +250,7 @@ async function downloadSingleVideo(
       viewCount?: number;
       likeCount?: number;
       commentCount?: number;
+      duration?: number;
     } = {};
 
     if (typeof meta.caption === "string" && meta.caption.trim().length > 0) {
@@ -270,6 +274,10 @@ async function downloadSingleVideo(
     if (typeof meta.commentCount === "number") {
       data.commentCount = meta.commentCount;
     }
+    if (typeof meta.duration === "number" && meta.duration > 0) {
+      data.duration = meta.duration;
+      metaDuration = meta.duration;
+    }
 
     if (Object.keys(data).length > 0) {
       await prisma.reel
@@ -289,10 +297,15 @@ async function downloadSingleVideo(
     const filepath = join(outputDir, result.filename);
     const s3Key = getS3Key("reels", reel.id);
 
-    // Get video duration before potentially deleting local file
-    const duration = await getVideoDuration(filepath);
+    // Use duration from metadata, fallback to ffprobe if not available
+    let duration = metaDuration;
+    if (!duration) {
+      duration = await getVideoDuration(filepath);
+    }
     if (duration) {
-      console.log(`  ✓ Video duration: ${duration}s`);
+      console.log(
+        `  ✓ Video duration: ${duration}s (source: ${metaDuration ? "metadata" : "ffprobe"})`
+      );
     }
 
     // Upload to S3 if configured

@@ -14,6 +14,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 
@@ -30,6 +31,13 @@ class FramesResponse(BaseModel):
     count: int
     duration_sec: Optional[float] = None
     interval_sec: float
+    error: Optional[str] = None
+
+
+class TrimResponse(BaseModel):
+    """Response with trimmed video info"""
+    success: bool
+    duration_sec: Optional[float] = None
     error: Optional[str] = None
 
 
@@ -140,6 +148,53 @@ def frames_to_base64(frame_paths: list[str]) -> list[str]:
             encoded = base64.b64encode(data).decode("utf-8")
             result.append(encoded)
     return result
+
+
+def trim_video_ffmpeg(
+    video_path: str,
+    output_path: str,
+    start_time: float,
+    end_time: float
+) -> bool:
+    """
+    Trim video between start_time and end_time using FFmpeg
+
+    Args:
+        video_path: Path to input video file
+        output_path: Path for output trimmed video
+        start_time: Start time in seconds
+        end_time: End time in seconds
+
+    Returns:
+        True if successful
+    """
+    # Use -ss before -i for fast seek, then -t for duration
+    duration = end_time - start_time
+
+    cmd = [
+        "ffmpeg",
+        "-ss", str(start_time),
+        "-i", video_path,
+        "-t", str(duration),
+        "-c:v", "libx264",
+        "-c:a", "aac",
+        "-preset", "fast",
+        "-movflags", "+faststart",
+        output_path,
+        "-y"
+    ]
+
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=300  # 5 minute timeout
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(f"FFmpeg trim failed: {result.stderr}")
+
+    return True
 
 
 @asynccontextmanager
@@ -308,6 +363,77 @@ async def extract_frames_from_bytes(
                 interval_sec=interval_sec
             )
     
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="Video processing timed out")
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {e}")
+
+
+@app.post("/trim")
+async def trim_video(
+    video: UploadFile = File(...),
+    start_time: float = Form(...),
+    end_time: float = Form(...)
+):
+    """
+    Trim video between start_time and end_time
+
+    - **video**: Video file (mp4, webm, etc.)
+    - **start_time**: Start time in seconds
+    - **end_time**: End time in seconds
+
+    Returns trimmed video as streaming response
+    """
+    if start_time < 0:
+        raise HTTPException(status_code=400, detail="start_time must be non-negative")
+
+    if end_time <= start_time:
+        raise HTTPException(status_code=400, detail="end_time must be greater than start_time")
+
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_path = os.path.join(tmpdir, "input_video.mp4")
+            output_path = os.path.join(tmpdir, "output_trimmed.mp4")
+
+            # Write uploaded video to temp file
+            content = await video.read()
+            with open(input_path, "wb") as f:
+                f.write(content)
+
+            # Get original duration and validate
+            original_duration = get_video_duration(input_path)
+            if original_duration and end_time > original_duration:
+                end_time = original_duration
+
+            # Trim the video
+            trim_video_ffmpeg(input_path, output_path, start_time, end_time)
+
+            # Check output exists
+            if not os.path.exists(output_path):
+                raise HTTPException(status_code=500, detail="Failed to create trimmed video")
+
+            # Get trimmed video duration
+            trimmed_duration = get_video_duration(output_path)
+
+            # Read the output file
+            with open(output_path, "rb") as f:
+                video_bytes = f.read()
+
+            # Return as streaming response
+            def iterfile():
+                yield video_bytes
+
+            return StreamingResponse(
+                iterfile(),
+                media_type="video/mp4",
+                headers={
+                    "Content-Disposition": "attachment; filename=trimmed_video.mp4",
+                    "X-Video-Duration": str(trimmed_duration) if trimmed_duration else "",
+                }
+            )
+
     except subprocess.TimeoutExpired:
         raise HTTPException(status_code=504, detail="Video processing timed out")
     except RuntimeError as e:

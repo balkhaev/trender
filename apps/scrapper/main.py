@@ -164,6 +164,7 @@ class MetadataResponse(BaseModel):
     viewCount: Optional[int] = None
     author: Optional[str] = None
     thumbnailUrl: Optional[str] = None
+    duration: Optional[int] = None  # Video duration in seconds
     error: Optional[str] = None
 
 
@@ -272,6 +273,10 @@ async def reel_metadata(request: DownloadRequest):
 
         thumbnail_url = getattr(post, "url", None) or None
 
+        # Get video duration
+        video_duration = getattr(post, "video_duration", None)
+        duration = safe_int(video_duration) if video_duration is not None else None
+
         return MetadataResponse(
             success=True,
             shortcode=request.shortcode,
@@ -281,6 +286,7 @@ async def reel_metadata(request: DownloadRequest):
             viewCount=view_count,
             author=author,
             thumbnailUrl=thumbnail_url,
+            duration=duration,
         )
     except instaloader.exceptions.InstaloaderException as e:
         return MetadataResponse(
