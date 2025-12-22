@@ -10,6 +10,7 @@ import { queuesRouter } from "./routes/queues";
 import { reelsRouter } from "./routes/reels";
 import { templatesRouter } from "./routes/templates";
 import { trendsRouter } from "./routes/trends";
+import { trimRouter } from "./routes/trim";
 import { video } from "./routes/video";
 import { closeAllQueues, initAllWorkers } from "./services/queues";
 
