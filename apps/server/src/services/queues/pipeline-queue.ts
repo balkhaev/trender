@@ -92,6 +92,32 @@ export const pipelineWorker = new Worker<PipelineJobData, PipelineJobResult>(
           };
         }
 
+        case "analyze-enchanting": {
+          await updateProgress(
+            job,
+            "analyze",
+            20,
+            "Starting enchanting analysis (Gemini + ChatGPT)..."
+          );
+
+          const analysisEnchanting =
+            await reelPipeline.analyzeReelEnchanting(reelId);
+          await job.updateProgress(70);
+
+          await updateProgress(job, "template", 80, "Creating template...");
+          const templateEnchanting = await reelPipeline.createTemplate(
+            reelId,
+            analysisEnchanting.id
+          );
+
+          await job.updateProgress(100);
+          return {
+            reelId,
+            analysisId: analysisEnchanting.id,
+            templateId: templateEnchanting.id,
+          };
+        }
+
         case "process": {
           await updateProgress(
             job,
@@ -234,6 +260,24 @@ export const pipelineJobQueue = {
       "analyze-frames",
       { reelId, action: "analyze-frames" },
       { jobId: `analyze-frames-${reelId}-${Date.now()}` }
+    );
+    return job.id ?? "";
+  },
+
+  /**
+   * Add enchanting analysis job (Gemini + ChatGPT for creative variants)
+   */
+  async addAnalyzeEnchantingJob(reelId: string): Promise<string> {
+    // Сразу обновляем статус на analyzing, чтобы UI мог включить polling
+    await prisma.reel.update({
+      where: { id: reelId },
+      data: { status: "analyzing" },
+    });
+
+    const job = await pipelineQueue.add(
+      "analyze-enchanting",
+      { reelId, action: "analyze-enchanting" },
+      { jobId: `analyze-enchanting-${reelId}-${Date.now()}` }
     );
     return job.id ?? "";
   },

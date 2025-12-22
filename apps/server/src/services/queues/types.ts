@@ -26,7 +26,12 @@ export type ScrapeJobResult = {
 // Pipeline Queue
 export type PipelineJobData = {
   reelId: string;
-  action: "process" | "download" | "analyze" | "analyze-frames";
+  action:
+    | "process"
+    | "download"
+    | "analyze"
+    | "analyze-frames"
+    | "analyze-enchanting";
   options?: {
     skipDownload?: boolean;
     skipAnalysis?: boolean;

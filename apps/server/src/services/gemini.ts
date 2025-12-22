@@ -86,6 +86,16 @@ export type VideoAnalysis = {
   elements: DetectableElement[];
 };
 
+// Элемент без вариантов (для enchanting режима)
+export type ElementWithoutOptions = Omit<DetectableElement, "remixOptions">;
+
+// Анализ видео без вариантов (для enchanting режима)
+export type VideoAnalysisWithoutOptions = {
+  duration: number | null;
+  aspectRatio: string;
+  elements: ElementWithoutOptions[];
+};
+
 const ANALYSIS_PROMPT = `You are an expert at identifying key visual elements in videos for AI video remix generation.
 
 Your task: Identify the KEY ELEMENTS in this video that can be transformed/replaced while keeping the same motion and composition.
@@ -159,6 +169,106 @@ CRITICAL RULES:
    - Transformations must be compatible with the original motion/composition
    - Identify multiple characters if present (each person/animal gets own element)
    - Identify multiple objects if they are visually significant`;
+
+// Промпт для анализа БЕЗ генерации вариантов (для enchanting режима)
+const ELEMENTS_ONLY_PROMPT = `You are an expert at identifying key visual elements in videos for AI video remix generation.
+
+Your task: Identify the KEY ELEMENTS in this video that can be transformed/replaced while keeping the same motion and composition.
+
+DO NOT generate remixOptions - only identify and describe the elements.
+
+Respond in JSON format:
+
+{
+  "duration": 5,
+  "aspectRatio": "9:16",
+
+  "elements": [
+    {
+      "id": "char-1",
+      "type": "character",
+      "label": "Young Woman",
+      "description": "A woman in her late 20s with long dark wavy hair, wearing a cream linen dress, holding a coffee cup"
+    },
+    {
+      "id": "obj-1",
+      "type": "object",
+      "label": "Coffee Cup",
+      "description": "Large ceramic mug with matte gray finish, steam rising"
+    },
+    {
+      "id": "bg-1",
+      "type": "background",
+      "label": "Kitchen",
+      "description": "Modern minimalist kitchen with white marble counters, morning sunlight through large windows"
+    }
+  ]
+}
+
+CRITICAL RULES:
+
+1. **Identify ALL significant elements** in the video:
+   - Characters (type: "character"): People, animals, creatures - use ids like "char-1", "char-2", etc.
+   - Objects (type: "object"): Important items, props, tools - use ids like "obj-1", "obj-2", etc.
+   - Backgrounds (type: "background"): Environments, settings - use ids like "bg-1", "bg-2", etc.
+   - Include EVERY distinct element that could be transformed (no limit on count)
+
+2. **DO NOT include remixOptions** - leave them out entirely
+
+3. **Label**: 2-3 words, descriptive name
+4. **Description**: Detailed description with specific visual details (materials, colors, textures, clothing, pose, etc.)
+
+5. **Quality requirements**:
+   - Be SPECIFIC in descriptions: "A woman in her late 20s with long dark wavy hair" not just "a woman"
+   - Describe clothing, accessories, pose, expression for characters
+   - Describe material, color, size, condition for objects
+   - Describe lighting, style, key features for backgrounds`;
+
+const FRAMES_ELEMENTS_ONLY_PROMPT = `You are an expert at identifying key visual elements in video frames for AI video remix generation.
+
+You are given a sequence of frames from a video. Identify the KEY ELEMENTS that can be transformed/replaced.
+
+DO NOT generate remixOptions - only identify and describe the elements.
+
+Respond in JSON format:
+
+{
+  "duration": 5,
+  "aspectRatio": "9:16",
+
+  "elements": [
+    {
+      "id": "char-1",
+      "type": "character",
+      "label": "Main Subject",
+      "description": "Detailed description of the main person/animal/subject visible across frames"
+    },
+    {
+      "id": "obj-1",
+      "type": "object",
+      "label": "Key Object",
+      "description": "Most prominent object visible in frames"
+    },
+    {
+      "id": "bg-1",
+      "type": "background",
+      "label": "Environment",
+      "description": "The setting/background visible across frames"
+    }
+  ]
+}
+
+CRITICAL RULES:
+
+1. **Identify ALL significant elements** visible in frames:
+   - Characters (type: "character"): People, animals, creatures - ids: "char-1", "char-2", etc.
+   - Objects (type: "object"): Important items, props - ids: "obj-1", "obj-2", etc.
+   - Backgrounds (type: "background"): Environments - ids: "bg-1", "bg-2", etc.
+   - No limit on element count - include EVERY distinct transformable element
+2. **DO NOT include remixOptions**
+3. **Analyze ALL frames together** to understand the complete scene
+4. **Be SPECIFIC** in descriptions: include materials, colors, textures, clothing, poses
+5. **Include multiple characters** if present - each person/animal gets own element`;
 
 const FRAMES_ANALYSIS_PROMPT = `You are an expert at identifying key visual elements in video frames for AI video remix generation.
 
@@ -550,6 +660,200 @@ export class GeminiService {
 
     // Analyze extracted frames
     return this.analyzeFrames(data.frames, onProgress);
+  }
+
+  // ============================================
+  // МЕТОДЫ ДЛЯ ENCHANTING РЕЖИМА (без вариантов)
+  // ============================================
+
+  /**
+   * Анализирует видео и возвращает только элементы БЕЗ remix-вариантов
+   * Используется для enchanting режима, где варианты генерирует ChatGPT
+   */
+  async analyzeVideoElementsOnly(
+    fileUri: string,
+    onProgress?: GeminiProgressCallback
+  ): Promise<VideoAnalysisWithoutOptions> {
+    await onProgress?.(
+      "analyzing",
+      55,
+      "Запуск AI-анализа видео (enchanting)..."
+    );
+
+    const model = this.genAI.getGenerativeModel({
+      model: "gemini-2.0-flash",
+      safetySettings: SAFETY_SETTINGS,
+    });
+
+    const result = await model.generateContent([
+      {
+        fileData: {
+          mimeType: "video/mp4",
+          fileUri,
+        },
+      },
+      { text: ELEMENTS_ONLY_PROMPT },
+    ]);
+
+    await onProgress?.("analyzing", 80, "Обработка результатов анализа...");
+
+    const response = result.response;
+    const text = extractTextFromResponse(response);
+
+    const jsonMatch = text.match(JSON_REGEX);
+    if (!jsonMatch) {
+      throw new Error("Failed to parse analysis response");
+    }
+
+    const raw = JSON.parse(jsonMatch[0]) as {
+      duration?: number | string | null;
+      aspectRatio?: string;
+      elements?: ElementWithoutOptions[];
+    };
+
+    const duration =
+      typeof raw.duration === "string"
+        ? Number.parseInt(raw.duration, 10) || null
+        : (raw.duration ?? null);
+
+    await onProgress?.("analyzing", 90, "Анализ элементов завершён");
+
+    return {
+      duration,
+      aspectRatio: raw.aspectRatio || "9:16",
+      elements: raw.elements || [],
+    };
+  }
+
+  /**
+   * Обрабатывает видео и возвращает только элементы БЕЗ вариантов
+   */
+  async processVideoElementsOnly(
+    videoBuffer: Buffer,
+    mimeType: string,
+    fileName: string,
+    onProgress?: GeminiProgressCallback
+  ): Promise<VideoAnalysisWithoutOptions> {
+    const fileUri = await this.uploadVideo(
+      videoBuffer,
+      mimeType,
+      fileName,
+      onProgress
+    );
+    return this.analyzeVideoElementsOnly(fileUri, onProgress);
+  }
+
+  /**
+   * Анализирует кадры и возвращает только элементы БЕЗ remix-вариантов
+   */
+  async analyzeFramesElementsOnly(
+    frames: string[],
+    onProgress?: GeminiProgressCallback
+  ): Promise<VideoAnalysisWithoutOptions> {
+    if (frames.length === 0) {
+      throw new Error("No frames provided for analysis");
+    }
+
+    await onProgress?.(
+      "analyzing",
+      55,
+      `Анализ ${frames.length} кадров (enchanting)...`
+    );
+
+    const model = this.genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      safetySettings: SAFETY_SETTINGS,
+    });
+
+    const imageParts = frames.map((base64) => ({
+      inlineData: {
+        mimeType: "image/jpeg",
+        data: base64,
+      },
+    }));
+
+    const result = await model.generateContent([
+      ...imageParts,
+      { text: FRAMES_ELEMENTS_ONLY_PROMPT },
+    ]);
+
+    await onProgress?.("analyzing", 80, "Обработка результатов анализа...");
+
+    const response = result.response;
+    const text = extractTextFromResponse(response);
+
+    const jsonMatch = text.match(JSON_REGEX);
+    if (!jsonMatch) {
+      throw new Error("Failed to parse analysis response");
+    }
+
+    const raw = JSON.parse(jsonMatch[0]) as {
+      duration?: number | string | null;
+      aspectRatio?: string;
+      elements?: ElementWithoutOptions[];
+    };
+
+    const duration =
+      typeof raw.duration === "string"
+        ? Number.parseInt(raw.duration, 10) || null
+        : (raw.duration ?? null);
+
+    await onProgress?.("analyzing", 90, "Анализ кадров завершён");
+
+    return {
+      duration,
+      aspectRatio: raw.aspectRatio || "9:16",
+      elements: raw.elements || [],
+    };
+  }
+
+  /**
+   * Обрабатывает видео по кадрам и возвращает только элементы БЕЗ вариантов
+   */
+  async processVideoByFramesElementsOnly(
+    videoBuffer: Buffer,
+    framesServiceUrl: string,
+    intervalSec = 2.0,
+    onProgress?: GeminiProgressCallback
+  ): Promise<VideoAnalysisWithoutOptions> {
+    await onProgress?.("processing", 10, "Извлечение кадров из видео...");
+
+    const formData = new FormData();
+    formData.append(
+      "video",
+      new Blob([new Uint8Array(videoBuffer)], { type: "video/mp4" }),
+      "video.mp4"
+    );
+    formData.append("interval_sec", intervalSec.toString());
+
+    const response = await fetch(`${framesServiceUrl}/extract-frames`, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to extract frames: ${error}`);
+    }
+
+    const data = (await response.json()) as {
+      success: boolean;
+      frames: string[];
+      count: number;
+      error?: string;
+    };
+
+    if (!data.success || data.frames.length === 0) {
+      throw new Error(data.error || "No frames extracted from video");
+    }
+
+    await onProgress?.(
+      "processing",
+      40,
+      `Извлечено ${data.count} кадров, начинаем анализ...`
+    );
+
+    return this.analyzeFramesElementsOnly(data.frames, onProgress);
   }
 }
 

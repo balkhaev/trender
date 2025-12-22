@@ -1074,6 +1074,35 @@ reelsRouter.post("/:id/analyze-frames", async (c) => {
   }
 });
 
+// Analyze a specific reel using enchanting mode (Gemini + ChatGPT)
+reelsRouter.post("/:id/analyze-enchanting", async (c) => {
+  try {
+    const id = c.req.param("id");
+
+    const reel = await prisma.reel.findUnique({ where: { id } });
+    if (!reel) {
+      return c.json({ error: "Reel not found" }, 404);
+    }
+
+    if (!(reel.localPath || reel.s3Key)) {
+      return c.json({ error: "Reel has no video. Download first." }, 400);
+    }
+
+    // Запускаем enchanting анализ через очередь
+    const jobId = await pipelineJobQueue.addAnalyzeEnchantingJob(id);
+
+    return c.json({
+      success: true,
+      jobId,
+      reelId: id,
+      message: "Enchanting analysis started (Gemini + ChatGPT)",
+    });
+  } catch (error) {
+    console.error("Start enchanting analysis error:", error);
+    return c.json({ error: "Failed to start enchanting analysis" }, 500);
+  }
+});
+
 // ============================================
 // DELETE ENDPOINTS
 // ============================================

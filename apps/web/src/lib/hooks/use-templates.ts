@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   analyzeReel,
   analyzeReelByFrames,
+  analyzeReelEnchanting,
   downloadReel,
   generateFromTemplate,
   generateVideo,
@@ -248,6 +249,20 @@ export function useAnalyzeReelByFrames() {
 
   return useMutation({
     mutationFn: (reelId: string) => analyzeReelByFrames(reelId),
+    onSuccess: (_, reelId) => {
+      queryClient.invalidateQueries({ queryKey: ["reel-debug", reelId] });
+      queryClient.invalidateQueries({ queryKey: ["saved-reels"] });
+      queryClient.invalidateQueries({ queryKey: ["templates"] });
+    },
+  });
+}
+
+// Analyze Reel Enchanting (Gemini + ChatGPT)
+export function useAnalyzeReelEnchanting() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (reelId: string) => analyzeReelEnchanting(reelId),
     onSuccess: (_, reelId) => {
       queryClient.invalidateQueries({ queryKey: ["reel-debug", reelId] });
       queryClient.invalidateQueries({ queryKey: ["saved-reels"] });

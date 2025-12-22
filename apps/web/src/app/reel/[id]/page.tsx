@@ -63,6 +63,7 @@ import { useDeleteReel } from "@/lib/hooks/use-dashboard";
 import {
   useAnalyzeReel,
   useAnalyzeReelByFrames,
+  useAnalyzeReelEnchanting,
   useDownloadReel,
   useGenerateVideo,
   useReelDebug,
@@ -160,6 +161,8 @@ export default function ReelDetailPage() {
   const { mutate: analyzeReel, isPending: isAnalyzing } = useAnalyzeReel();
   const { mutate: analyzeReelByFrames, isPending: isAnalyzingFrames } =
     useAnalyzeReelByFrames();
+  const { mutate: analyzeReelEnchanting, isPending: isAnalyzingEnchanting } =
+    useAnalyzeReelEnchanting();
   const { mutate: generateVideo, isPending: isGenerating } = useGenerateVideo();
   const { mutateAsync: deleteReelAsync, isPending: isDeleting } =
     useDeleteReel();
@@ -193,6 +196,14 @@ export default function ReelDetailPage() {
       onError: (err: Error) => toast.error(err.message),
     });
   }, [reelId, analyzeReelByFrames]);
+
+  const handleAnalyzeEnchanting = useCallback(() => {
+    analyzeReelEnchanting(reelId, {
+      onSuccess: () =>
+        toast.success("Enchanting анализ запущен (Gemini + ChatGPT)"),
+      onError: (err: Error) => toast.error(err.message),
+    });
+  }, [reelId, analyzeReelEnchanting]);
 
   const handleDelete = useCallback(async () => {
     try {
@@ -520,9 +531,11 @@ export default function ReelDetailPage() {
                     data.reel.status !== "downloading"
                   }
                   isAnalyzing={isAnalyzing}
+                  isAnalyzingEnchanting={isAnalyzingEnchanting}
                   isAnalyzingFrames={isAnalyzingFrames}
                   isGenerating={isGenerating}
                   onAnalyze={handleAnalyze}
+                  onAnalyzeEnchanting={handleAnalyzeEnchanting}
                   onAnalyzeFrames={handleAnalyzeFrames}
                   onGenerate={handleGenerate}
                   sourceVideoUrl={data.videoUrl || data.reel.videoUrl || ""}

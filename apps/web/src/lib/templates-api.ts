@@ -27,7 +27,7 @@ export type DetectableElement = {
   remixOptions: RemixOption[]; // 4 transformation options
 };
 
-export type AnalysisType = "standard" | "frames";
+export type AnalysisType = "standard" | "frames" | "enchanting";
 
 // Analysis type - focused on elements for remix
 // Legacy fields are kept for backward compatibility with old analyses
@@ -520,5 +520,20 @@ export async function analyzeReelByFrames(reelId: string): Promise<void> {
 
   if (!response.ok) {
     throw new Error("Failed to start frame analysis");
+  }
+}
+
+// Enchanting analysis: Gemini detects elements, ChatGPT generates remix options
+export async function analyzeReelEnchanting(reelId: string): Promise<void> {
+  const response = await fetch(
+    `${API_URL}/api/reels/${reelId}/analyze-enchanting`,
+    {
+      method: "POST",
+      credentials: "include",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("Failed to start enchanting analysis");
   }
 }

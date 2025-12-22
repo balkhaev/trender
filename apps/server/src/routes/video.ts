@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import { getGeminiService, type VideoAnalysis } from "../services/gemini";
 import { getDownloadsPath } from "../services/instagram/downloader";
 import { isKlingConfigured } from "../services/kling";
+import { getOpenAIService, isOpenAIConfigured } from "../services/openai";
 import { getVideoGenerationsPath, videoGenJobQueue } from "../services/queues";
 import { getS3Key, isS3Configured, s3Service } from "../services/s3";
 
@@ -102,6 +103,119 @@ video.post("/analyze", async (c) => {
     });
   } catch (error) {
     console.error("Video analysis error:", error);
+
+    const message =
+      error instanceof Error ? error.message : "Unknown error occurred";
+    return c.json({ error: message }, 500);
+  }
+});
+
+// Enchanting анализ: Gemini определяет элементы, ChatGPT генерирует варианты
+video.post("/analyze-enchanting", async (c) => {
+  try {
+    const formData = await c.req.formData();
+    const file = formData.get("video");
+
+    if (!(file && file instanceof File)) {
+      return c.json({ error: "Video file is required" }, 400);
+    }
+
+    if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+      return c.json(
+        {
+          error: `Invalid file type. Allowed: ${ALLOWED_MIME_TYPES.join(", ")}`,
+        },
+        400
+      );
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      return c.json(
+        {
+          error: `File too large. Maximum size: ${MAX_FILE_SIZE / 1024 / 1024}MB`,
+        },
+        400
+      );
+    }
+
+    // Проверяем что OpenAI настроен
+    if (!isOpenAIConfigured()) {
+      return c.json(
+        {
+          error:
+            "OpenAI API is not configured. Set OPENAI_API_KEY environment variable.",
+        },
+        500
+      );
+    }
+
+    const geminiService = getGeminiService();
+    const openaiService = getOpenAIService();
+    const buffer = Buffer.from(await file.arrayBuffer());
+
+    // 1. Gemini анализирует видео и возвращает только элементы
+    const elementsAnalysis = await geminiService.processVideoElementsOnly(
+      buffer,
+      file.type,
+      file.name
+    );
+
+    // 2. ChatGPT генерирует варианты для каждого элемента
+    const enchantingResults = await openaiService.generateEnchantingOptions(
+      elementsAnalysis.elements
+    );
+
+    // 3. Объединяем элементы с вариантами
+    const elementsWithOptions: Array<{
+      id: string;
+      type: "character" | "object" | "background";
+      label: string;
+      description: string;
+      remixOptions: Array<{
+        id: string;
+        label: string;
+        icon: string;
+        prompt: string;
+      }>;
+    }> = elementsAnalysis.elements.map((element) => {
+      const enchantingResult = enchantingResults.find(
+        (r) => r.id === element.id
+      );
+      return {
+        id: element.id,
+        type: element.type,
+        label: element.label,
+        description: element.description,
+        remixOptions: enchantingResult?.remixOptions || [],
+      };
+    });
+
+    const analysis: VideoAnalysis = {
+      duration: elementsAnalysis.duration,
+      aspectRatio: elementsAnalysis.aspectRatio,
+      elements: elementsWithOptions,
+    };
+
+    // Save to database with enchanting mode marker
+    const saved = await prisma.videoAnalysis.create({
+      data: {
+        sourceType: "upload",
+        analysisType: "enchanting",
+        fileName: file.name,
+        duration: analysis.duration,
+        aspectRatio: analysis.aspectRatio,
+        elements: analysis.elements,
+      },
+    });
+
+    return c.json({
+      success: true,
+      analysis,
+      analysisId: saved.id,
+      mode: "enchanting",
+    });
+  } catch (error) {
+    console.error("Enchanting analysis error:", error);
 
     const message =
       error instanceof Error ? error.message : "Unknown error occurred";

@@ -45,6 +45,11 @@ const ANALYSIS_TYPE_CONFIG: Record<
     description: "Быстрый анализ по кадрам",
     icon: Film,
   },
+  enchanting: {
+    label: "Enchanting",
+    description: "Gemini + ChatGPT для креативных вариантов",
+    icon: Wand2,
+  },
 };
 
 type VideoGeneratorProps = {
@@ -57,9 +62,11 @@ type VideoGeneratorProps = {
   ) => Promise<void>;
   onAnalyze: () => void;
   onAnalyzeFrames: () => void;
+  onAnalyzeEnchanting?: () => void;
   isGenerating?: boolean;
   isAnalyzing?: boolean;
   isAnalyzingFrames?: boolean;
+  isAnalyzingEnchanting?: boolean;
   canAnalyze?: boolean;
 };
 
@@ -69,9 +76,11 @@ export function VideoGenerator({
   onGenerate,
   onAnalyze,
   onAnalyzeFrames,
+  onAnalyzeEnchanting,
   isGenerating = false,
   isAnalyzing = false,
   isAnalyzingFrames = false,
+  isAnalyzingEnchanting = false,
   canAnalyze = true,
 }: VideoGeneratorProps) {
   // Group analyses by type
@@ -79,6 +88,7 @@ export function VideoGenerator({
     const byType: Record<AnalysisType, TemplateAnalysis | null> = {
       standard: null,
       frames: null,
+      enchanting: null,
     };
 
     for (const analysis of analyses) {
@@ -220,7 +230,8 @@ export function VideoGenerator({
     onGenerate,
   ]);
 
-  const isAnyAnalyzing = isAnalyzing || isAnalyzingFrames;
+  const isAnyAnalyzing =
+    isAnalyzing || isAnalyzingFrames || isAnalyzingEnchanting;
 
   return (
     <Card className="border-violet-500/20 bg-linear-to-br from-violet-500/5 to-transparent">
@@ -241,7 +252,7 @@ export function VideoGenerator({
         >
           <div className="flex items-center gap-2">
             <TabsList className="flex-1">
-              {(["standard", "frames"] as const).map((type) => {
+              {(["standard", "frames", "enchanting"] as const).map((type) => {
                 const config = ANALYSIS_TYPE_CONFIG[type];
                 const Icon = config.icon;
                 const hasAnalysis = analysesByType[type] !== null;
@@ -265,13 +276,24 @@ export function VideoGenerator({
 
             {/* Analyze Button */}
             <Button
-              disabled={!canAnalyze || isAnyAnalyzing}
-              onClick={activeTab === "frames" ? onAnalyzeFrames : onAnalyze}
+              disabled={
+                !canAnalyze ||
+                isAnyAnalyzing ||
+                (activeTab === "enchanting" && !onAnalyzeEnchanting)
+              }
+              onClick={
+                activeTab === "frames"
+                  ? onAnalyzeFrames
+                  : activeTab === "enchanting"
+                    ? onAnalyzeEnchanting
+                    : onAnalyze
+              }
               size="sm"
               variant="outline"
             >
               {(activeTab === "standard" && isAnalyzing) ||
-              (activeTab === "frames" && isAnalyzingFrames) ? (
+              (activeTab === "frames" && isAnalyzingFrames) ||
+              (activeTab === "enchanting" && isAnalyzingEnchanting) ? (
                 <Loader2 className="mr-1 h-3 w-3 animate-spin" />
               ) : (
                 <Sparkles className="mr-1 h-3 w-3" />
@@ -281,7 +303,7 @@ export function VideoGenerator({
           </div>
 
           {/* Tab Content */}
-          {(["standard", "frames"] as const).map((type) => {
+          {(["standard", "frames", "enchanting"] as const).map((type) => {
             const analysis = analysesByType[type];
             const config = ANALYSIS_TYPE_CONFIG[type];
 
