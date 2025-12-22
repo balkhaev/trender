@@ -1,0 +1,153 @@
+name: trender-prod
+
+services:
+  postgres:
+    image: postgres:16-bookworm
+    container_name: trender-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-trender}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - trender_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - trender-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: trender-redis
+    volumes:
+      - trender_redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - trender-network
+
+  playwright:
+    build:
+      context: .
+      dockerfile: apps/playwright/Dockerfile
+    container_name: trender-playwright
+    environment:
+      NODE_ENV: production
+      PORT: 3002
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - trender-network
+
+  server:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    container_name: trender-server
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-trender}
+      REDIS_URL: redis://redis:6379
+      PLAYWRIGHT_SERVICE_URL: http://playwright:3002
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      playwright:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - trender-network
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3000}
+    container_name: trender-web
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    ports:
+      - "3001:3000"
+    depends_on:
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - trender-network
+
+  scrapper:
+    build:
+      context: .
+      dockerfile: apps/scrapper/Dockerfile
+    container_name: trender-scrapper
+    environment:
+      PORT: 8001
+    volumes:
+      - trender_scrapper_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8001/health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - trender-network
+
+  video-frames:
+    build:
+      context: .
+      dockerfile: apps/video-frames/Dockerfile
+    container_name: trender-video-frames
+    environment:
+      PORT: 8002
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8002/health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - trender-network
+
+volumes:
+  trender_postgres_data:
+  trender_redis_data:
+  trender_scrapper_data:
+
+networks:
+  trender-network:
+    driver: bridge

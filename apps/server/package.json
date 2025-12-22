@@ -1,0 +1,36 @@
+{
+  "name": "server",
+  "main": "src/index.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsdown",
+    "check-types": "tsc -b",
+    "compile": "bun build --compile --minify --sourcemap --bytecode ./src/index.ts --outfile server",
+    "dev": "bun run --hot src/index.ts",
+    "start": "bun run dist/index.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.712.0",
+    "@google/genai": "^1.33.0",
+    "@google/generative-ai": "^0.24.1",
+    "@hono/zod-openapi": "^1.2.0",
+    "@scalar/hono-api-reference": "^0.9.30",
+    "@trender/auth": "workspace:*",
+    "@trender/db": "workspace:*",
+    "better-auth": "catalog:",
+    "bullmq": "^5.66.0",
+    "dotenv": "catalog:",
+    "hono": "^4.8.2",
+    "ioredis": "^5.8.2",
+    "jsonwebtoken": "^9.0.3",
+    "openai": "^6.10.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@trender/config": "workspace:*",
+    "@types/bun": "catalog:",
+    "@types/jsonwebtoken": "^9.0.10",
+    "tsdown": "^0.16.5",
+    "typescript": "catalog:"
+  }
+}

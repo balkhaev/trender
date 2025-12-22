@@ -1,0 +1,11 @@
+model InstagramCredentials {
+  id        String   @id @default(cuid())
+  cookies   Json     // Playwright cookies array
+  state     Json?    // Playwright storage state
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  isActive  Boolean  @default(true)
+
+  @@map("instagram_credentials")
+}
+

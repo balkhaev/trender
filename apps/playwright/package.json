@@ -1,0 +1,18 @@
+{
+  "name": "@trender/playwright",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/main.ts",
+    "build": "echo 'No build needed - runs directly with bun'",
+    "start": "bun run src/main.ts"
+  },
+  "dependencies": {
+    "hono": "^4.7.0",
+    "playwright": "^1.52.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

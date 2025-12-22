@@ -1,0 +1,27 @@
+enum LogLevel {
+  debug
+  info
+  warn
+  error
+}
+
+model ReelLog {
+  id        String   @id @default(uuid())
+  reelId    String
+  reel      Reel     @relation(fields: [reelId], references: [id], onDelete: Cascade)
+
+  level     LogLevel
+  stage     String   // "scrape", "download", "analyze", "generate"
+  message   String
+  metadata  Json?    // дополнительные данные
+  duration  Int?     // время выполнения в ms
+
+  createdAt DateTime @default(now())
+
+  @@index([reelId])
+  @@index([stage])
+  @@index([createdAt])
+}
+
+
+

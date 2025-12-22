@@ -1,0 +1,23 @@
+{
+  "name": "@trender/auth",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./*": {
+      "default": "./src/*.ts"
+    }
+  },
+  "type": "module",
+  "scripts": {},
+  "devDependencies": {
+    "typescript": "catalog:",
+    "@trender/config": "workspace:*"
+  },
+  "dependencies": {
+    "better-auth": "catalog:",
+    "dotenv": "catalog:",
+    "zod": "catalog:",
+    "@trender/db": "workspace:*"
+  }
+}

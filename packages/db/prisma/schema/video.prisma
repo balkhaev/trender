@@ -1,0 +1,101 @@
+model VideoAnalysis {
+  id           String   @id @default(uuid())
+  sourceType   String // "upload", "reel", "url"
+  sourceId     String? // reelId if from reel
+  fileName     String?
+  analysisType String @default("standard") // "standard" | "frames"
+
+  // Basic fields (Quick mode - 5-10 main parameters)
+  subject      String // Кто/что на видео (главный субъект)
+  action       String // Что происходит (действие)
+  environment  String // Локация/окружение
+  cameraStyle  String // Стиль камеры (общее описание)
+  mood         String // Настроение/атмосфера
+  colorPalette String // Цветовая гамма
+  style        String // Визуальный стиль
+  duration     Int?   // Длительность в секундах
+  aspectRatio  String @default("9:16") // Соотношение сторон
+
+  // Detailed fields (Pro mode)
+  scenes           Json @default("[]") // Массив сцен [{timestamp, description, action}]
+  characters       Json @default("[]") // Персонажи [{age, gender, appearance, clothing, actions}]
+  objects          Json @default("[]") // Объекты [{name, role, position, description}]
+  cameraMovements  Json @default("[]") // Движения камеры [{type, direction, speed, startTime, endTime}]
+  lighting         String // Освещение (детальное)
+  transitions      Json @default("[]") // Переходы [{type, timestamp}]
+  audio            Json @default("{}") // Аудио {music, speech, effects, mood}
+  textOverlays     Json @default("[]") // Текст на видео [{text, timestamp, position, style}]
+  
+  // Legacy field (kept for compatibility)
+  pacing       String @default("")
+  cameraWork   String @default("") // Deprecated: use cameraStyle + cameraMovements
+  
+  // Generation prompts
+  klingPrompt  String @default("") // Готовый промпт для Kling OmniVideo
+  veo3Prompt   String @default("") // Legacy: промпт для Veo3
+  
+  tags         String[] @default([]) // semantic topic tags
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  generations VideoGeneration[]
+  template    Template?
+
+  @@index([sourceType])
+  @@index([sourceId])
+  @@index([sourceId, analysisType])
+  @@index([createdAt])
+}
+
+model VideoGeneration {
+  id         String        @id @default(uuid())
+  analysisId String
+  analysis   VideoAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  provider String // "kling" (video-to-video)
+  status   String @default("pending") // pending, processing, completed, failed
+  prompt   String // Промпт изменений для Kling
+
+  // Source video for video-to-video generation
+  sourceVideoUrl String? // URL исходного видео для референса
+  sourceVideoS3Key String? // S3 ключ исходного видео
+
+  // Generation options
+  outputDuration Int @default(5) // 5 или 10 секунд
+  outputAspectRatio String @default("auto") // "16:9" | "9:16" | "1:1" | "auto"
+  keepAudio Boolean @default(false)
+
+  // Remix feature: image references
+  imageReferences String[] @default([]) // URLs загруженных изображений для @Image/@Element
+  remixSource     String?  // ID оригинального рила-источника для remix
+
+  // Result
+  videoUrl     String?
+  s3Key        String?     // ключ файла в S3/MinIO
+  thumbnailUrl String?
+  durationSec  Int?
+  error        String?
+
+  // Kling API specific
+  klingTaskId  String? // ID задачи в Kling API
+
+  // Progress tracking
+  progress        Int       @default(0)      // 0-100%
+  progressStage   String    @default("pending") // "pending" | "processing" | "downloading" | "uploading"
+  progressMessage String    @default("")     // Человекочитаемое сообщение
+  klingProgress   Int?                       // Прогресс от Kling API (если есть)
+  lastActivityAt  DateTime?                  // Время последней активности
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+
+  @@index([analysisId])
+  @@index([status])
+  @@index([klingTaskId])
+  @@index([remixSource])
+}
+
+
+

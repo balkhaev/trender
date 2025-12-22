@@ -1,0 +1,26 @@
+.git
+.DS_Store
+
+# Node/Bun artifacts
+**/node_modules
+**/.bun
+**/.turbo
+
+# Builds
+**/dist
+**/.next
+**/out
+**/coverage
+
+# Playwright
+**/test-results
+**/playwright-report
+
+# Python caches (instagram-downloader)
+**/__pycache__
+**/*.pyc
+
+# Local env / secrets
+**/.env
+**/.env.*
+!**/.env.example

@@ -1,0 +1,26 @@
+model Template {
+  id              String   @id @default(uuid())
+  title           String?
+  tags            String[] // ["travel", "lifestyle"]
+  category        String?  // "viral", "tutorial", etc.
+
+  // Связи
+  reelId          String   @unique
+  reel            Reel     @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  analysisId      String   @unique
+  analysis        VideoAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  // Метрики
+  generationCount Int      @default(0)
+
+  isPublished     Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([isPublished])
+  @@index([category])
+  @@index([createdAt])
+}
+
+
+
