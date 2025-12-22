@@ -4,6 +4,7 @@ import { apiReference } from "@scalar/hono-api-reference";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { authRouter } from "./routes/auth";
+import { debugRouter } from "./routes/debug";
 import { filesRouter } from "./routes/files";
 import { pipelineRouter } from "./routes/pipeline";
 import { queuesRouter } from "./routes/queues";

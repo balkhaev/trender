@@ -132,7 +132,9 @@ class AILogger {
    * Получить AI логи с фильтрацией
    */
   async getAILogs(filter: AILogsFilter = {}): Promise<AILog[]> {
-    const where: Parameters<typeof prisma.aILog.findMany>[0]["where"] = {};
+    const where: NonNullable<
+      Parameters<typeof prisma.aILog.findMany>[0]
+    >["where"] = {};
 
     if (filter.provider) where.provider = filter.provider;
     if (filter.operation) where.operation = filter.operation;
@@ -157,7 +159,9 @@ class AILogger {
    * Получить метрики AI по провайдерам
    */
   async getAIMetrics(from?: Date, to?: Date): Promise<AIMetrics[]> {
-    const where: Parameters<typeof prisma.aILog.findMany>[0]["where"] = {};
+    const where: NonNullable<
+      Parameters<typeof prisma.aILog.findMany>[0]
+    >["where"] = {};
 
     if (from || to) {
       where.createdAt = {};
@@ -214,7 +218,9 @@ class AILogger {
    * Получить статистику за период
    */
   async getStats(from?: Date, to?: Date) {
-    const where: Parameters<typeof prisma.aILog.count>[0]["where"] = {};
+    const where: NonNullable<
+      Parameters<typeof prisma.aILog.count>[0]
+    >["where"] = {};
 
     if (from || to) {
       where.createdAt = {};

@@ -43,15 +43,15 @@ debugRouter.get("/stats", async (c) => {
     const queuesStatus = await getQueuesStatus();
 
     const queueStats = {
-      totalActive: queuesStatus.reduce((acc, q) => acc + q.counts.active, 0),
-      totalPending: queuesStatus.reduce((acc, q) => acc + q.counts.waiting, 0),
+      totalActive: queuesStatus.reduce((acc, q) => acc + q.active, 0),
+      totalPending: queuesStatus.reduce((acc, q) => acc + q.waiting, 0),
       byQueue: Object.fromEntries(
         queuesStatus.map((q) => [
           q.name,
           {
-            active: q.counts.active,
-            pending: q.counts.waiting,
-            failed: q.counts.failed,
+            active: q.active,
+            pending: q.waiting,
+            failed: q.failed,
           },
         ])
       ),
@@ -89,7 +89,9 @@ debugRouter.get("/logs", async (c) => {
     const limit = Number.parseInt(c.req.query("limit") || "100", 10);
     const offset = Number.parseInt(c.req.query("offset") || "0", 10);
 
-    const where: Parameters<typeof prisma.reelLog.findMany>[0]["where"] = {};
+    const where: NonNullable<
+      Parameters<typeof prisma.reelLog.findMany>[0]
+    >["where"] = {};
 
     if (level) where.level = level as "debug" | "info" | "warn" | "error";
     if (stage) where.stage = stage;
