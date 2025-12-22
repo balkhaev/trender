@@ -63,6 +63,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-trender}
       REDIS_URL: redis://redis:6379
       PLAYWRIGHT_SERVICE_URL: http://playwright:3002
+      SCRAPPER_SERVICE_URL: http://scrapper:8001
+      VIDEO_FRAMES_SERVICE_URL: http://video-frames:8002
     ports:
       - "3000:3000"
     depends_on:
@@ -71,6 +73,10 @@ services:
       redis:
         condition: service_healthy
       playwright:
+        condition: service_healthy
+      scrapper:
+        condition: service_healthy
+      video-frames:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:3000/"]
@@ -114,6 +120,7 @@ services:
     container_name: trender-scrapper
     environment:
       PORT: 8001
+      SERVER_URL: http://server:3000
     volumes:
       - trender_scrapper_data:/data
     healthcheck:
