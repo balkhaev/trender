@@ -296,8 +296,10 @@ export class KlingService {
 
       // Build input with video and optional image/element references
       // Note: prompt and negative_prompt go at the TOP LEVEL, not inside input
+      // aspect_ratio must be inside input object per Kling API spec
       const input: {
         videos: { url: string }[];
+        aspect_ratio: string;
         image_urls?: string[];
         elements?: {
           reference_image_urls: string[];
@@ -305,6 +307,7 @@ export class KlingService {
         }[];
       } = {
         videos: [{ url: sourceVideoUrl }],
+        aspect_ratio: options.aspectRatio || "16:9",
       };
 
       // Add image references (@Image1, @Image2...)
@@ -329,7 +332,6 @@ export class KlingService {
         input,
         config: {
           duration: options.duration || 5,
-          aspect_ratio: options.aspectRatio || "16:9",
           mode: options.mode || "std",
           keep_audio: options.keepAudio,
         },
@@ -339,7 +341,7 @@ export class KlingService {
         promptLength: fullPrompt.length,
         promptPreview: fullPrompt.slice(0, 100),
         duration: requestBody.config.duration,
-        aspectRatio: requestBody.config.aspect_ratio,
+        aspectRatio: input.aspect_ratio,
         mode: requestBody.config.mode,
         hasImages: !!input.image_urls?.length,
         hasElements: !!input.elements?.length,

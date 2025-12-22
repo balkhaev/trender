@@ -362,4 +362,65 @@ app.openapi(statusRoute, async (c) => {
   });
 });
 
+// ============================================
+// JOB STATUS ENDPOINT (by jobId)
+// ============================================
+
+const jobStatusRoute = createRoute({
+  method: "get",
+  path: "/job/{jobId}",
+  summary: "Get job status by jobId",
+  tags: ["Pipeline"],
+  description:
+    "Returns current job status, progress, and metadata. Use this to track a specific job.",
+  request: {
+    params: z.object({
+      jobId: z.string().openapi({
+        example: "process-ABC123-1234567890",
+        description: "The job ID returned from generate/upload endpoints",
+      }),
+    }),
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            id: z.string(),
+            reelId: z.string(),
+            action: z.string(),
+            state: z.string(),
+            progress: z.union([z.number(), z.object({})]),
+            attemptsMade: z.number(),
+            failedReason: z.string().nullable(),
+            finishedOn: z.number().nullable(),
+            processedOn: z.number().nullable(),
+          }),
+        },
+      },
+      description: "Current job status",
+    },
+    404: {
+      content: {
+        "application/json": {
+          schema: NotFoundResponseSchema,
+        },
+      },
+      description: "Job not found",
+    },
+  },
+});
+
+app.openapi(jobStatusRoute, async (c) => {
+  const { jobId } = c.req.valid("param");
+
+  const job = await pipelineJobQueue.getJob(jobId);
+
+  if (!job) {
+    return c.json({ error: "Job not found" }, 404);
+  }
+
+  return c.json(job);
+});
+
 export { app as pipelineRouter };
