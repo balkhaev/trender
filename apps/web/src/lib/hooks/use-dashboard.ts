@@ -3,6 +3,8 @@ import {
   type AddReelRequest,
   type AuthStatus,
   addReelByUrl,
+  type BatchAnalyzeRequest,
+  batchAnalyzeReels,
   deleteAllReels,
   deleteReel,
   getAuthStatus,
@@ -223,6 +225,19 @@ export function useDeleteAllReels() {
 
   return useMutation({
     mutationFn: () => deleteAllReels(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["reels"] });
+      queryClient.invalidateQueries({ queryKey: ["reelStats"] });
+      queryClient.invalidateQueries({ queryKey: ["templates"] });
+    },
+  });
+}
+
+export function useBatchAnalyze() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (request: BatchAnalyzeRequest) => batchAnalyzeReels(request),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["reels"] });
       queryClient.invalidateQueries({ queryKey: ["reelStats"] });

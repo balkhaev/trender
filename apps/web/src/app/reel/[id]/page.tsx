@@ -8,7 +8,6 @@ import {
   Download,
   ExternalLink,
   Eye,
-  Film,
   Heart,
   Loader2,
   MessageCircle,
@@ -40,7 +39,6 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
-import { AnalysisComparison } from "@/components/analysis-comparison";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -73,7 +71,6 @@ import type {
   KlingGenerationOptions,
   ReelLog,
   StageStats,
-  TemplateAnalysis,
   VideoGeneration,
 } from "@/lib/templates-api";
 
@@ -154,9 +151,6 @@ export default function ReelDetailPage() {
   const router = useRouter();
   const reelId = params.id as string;
 
-  // Selected analysis for generation (set when user clicks "Use for generation")
-  const [selectedAnalysis, setSelectedAnalysis] =
-    useState<TemplateAnalysis | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const generatorRef = useRef<HTMLDivElement>(null);
 
@@ -210,33 +204,8 @@ export default function ReelDetailPage() {
     }
   }, [reelId, deleteReelAsync, router]);
 
-  // Get the active analysis (selected or first available)
-  const activeAnalysis =
-    selectedAnalysis ||
-    (data?.analyses && data.analyses.length > 0 ? data.analyses[0] : null);
-
-  const handleUseForGeneration = useCallback((analysis: TemplateAnalysis) => {
-    setSelectedAnalysis(analysis);
-    toast.success(
-      `Выбран анализ "${analysis.analysisType === "frames" ? "По кадрам" : "Стандартный"}" для генерации`
-    );
-
-    // Прокрутить к генератору
-    setTimeout(() => {
-      generatorRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }, 100);
-  }, []);
-
   const handleGenerate = useCallback(
-    (prompt: string, options: KlingGenerationOptions) => {
-      if (!activeAnalysis?.id) {
-        toast.error("Сначала проанализируйте рил");
-        return Promise.resolve();
-      }
-
+    (prompt: string, options: KlingGenerationOptions, analysisId: string) => {
       // Get source video URL
       const sourceVideoUrl = data?.videoUrl || data?.reel.videoUrl;
       if (!sourceVideoUrl) {
@@ -247,7 +216,7 @@ export default function ReelDetailPage() {
       return new Promise<void>((resolve, reject) => {
         generateVideo(
           {
-            analysisId: activeAnalysis.id,
+            analysisId,
             prompt,
             sourceVideoUrl,
             options,
@@ -266,13 +235,7 @@ export default function ReelDetailPage() {
         );
       });
     },
-    [
-      activeAnalysis?.id,
-      data?.videoUrl,
-      data?.reel?.videoUrl,
-      generateVideo,
-      refetch,
-    ]
+    [data?.videoUrl, data?.reel?.videoUrl, generateVideo, refetch]
   );
 
   if (isLoading) {
@@ -424,7 +387,7 @@ export default function ReelDetailPage() {
                 <CardTitle className="text-base">Действия</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-2">
-                {/* Шаг 1: Скачать (показываем только если видео ещё не скачано) */}
+                {/* Скачать (показываем только если видео ещё не скачано) */}
                 {(data.reel.status === "scraped" ||
                   data.reel.status === "downloading") && (
                   <Button
@@ -441,48 +404,6 @@ export default function ReelDetailPage() {
                     )}
                     Скачать
                   </Button>
-                )}
-
-                {/* Шаг 2: Анализ / По кадрам (показываем если видео скачано, проанализировано или была ошибка) */}
-                {(data.reel.status === "downloaded" ||
-                  data.reel.status === "analyzing" ||
-                  data.reel.status === "analyzed" ||
-                  data.reel.status === "failed") && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      disabled={
-                        isAnalyzing ||
-                        isAnalyzingFrames ||
-                        data.reel.status === "analyzing"
-                      }
-                      onClick={handleAnalyze}
-                      variant="outline"
-                    >
-                      {isAnalyzing || data.reel.status === "analyzing" ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Sparkles className="mr-2 h-4 w-4" />
-                      )}
-                      Анализ
-                    </Button>
-                    <Button
-                      disabled={
-                        isAnalyzing ||
-                        isAnalyzingFrames ||
-                        data.reel.status === "analyzing"
-                      }
-                      onClick={handleAnalyzeFrames}
-                      title="Анализ видео по кадрам через Gemini 2.5 Flash"
-                      variant="outline"
-                    >
-                      {isAnalyzingFrames ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Film className="mr-2 h-4 w-4" />
-                      )}
-                      По кадрам
-                    </Button>
-                  </div>
                 )}
 
                 <Button asChild variant="secondary">
@@ -580,25 +501,26 @@ export default function ReelDetailPage() {
               </Card>
             ) : null}
 
-            {/* Analysis Comparison (switch between standard/frames) */}
-            {data.analyses?.length > 0 ? (
-              <AnalysisComparison
-                analyses={data.analyses}
-                onUseForGeneration={handleUseForGeneration}
-              />
-            ) : null}
-
-            {/* Video Generator (Kling) */}
-            {activeAnalysis ? (
+            {/* Video Generator (Kling) - показываем когда видео скачано */}
+            {hasVideo(data.reel) && (
               <div ref={generatorRef}>
                 <VideoGenerator
-                  analysis={activeAnalysis}
+                  analyses={data.analyses || []}
+                  canAnalyze={
+                    data.reel.status !== "analyzing" &&
+                    data.reel.status !== "scraped" &&
+                    data.reel.status !== "downloading"
+                  }
+                  isAnalyzing={isAnalyzing}
+                  isAnalyzingFrames={isAnalyzingFrames}
                   isGenerating={isGenerating}
+                  onAnalyze={handleAnalyze}
+                  onAnalyzeFrames={handleAnalyzeFrames}
                   onGenerate={handleGenerate}
                   sourceVideoUrl={data.videoUrl || data.reel.videoUrl || ""}
                 />
               </div>
-            ) : null}
+            )}
 
             {/* Debug Tabs */}
             <Card>

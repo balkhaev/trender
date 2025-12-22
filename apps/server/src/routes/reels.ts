@@ -850,6 +850,81 @@ reelsRouter.post("/:id/refresh-metadata", async (c) => {
   }
 });
 
+// Batch analyze multiple reels
+const batchAnalyzeSchema = z.object({
+  reelIds: z.array(z.string()).min(1).max(100),
+  analysisType: z.enum(["standard", "frames"]).default("standard"),
+});
+
+reelsRouter.post("/batch-analyze", async (c) => {
+  try {
+    const body = await c.req.json();
+    const parsed = batchAnalyzeSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return c.json(
+        {
+          error: "Invalid request",
+          details: parsed.error.flatten().fieldErrors,
+        },
+        400
+      );
+    }
+
+    const { reelIds, analysisType } = parsed.data;
+
+    // Проверяем существование рилов и наличие видео
+    const reels = await prisma.reel.findMany({
+      where: { id: { in: reelIds } },
+      select: { id: true, localPath: true, s3Key: true, status: true },
+    });
+
+    const foundIds = new Set(reels.map((r) => r.id));
+    const notFound = reelIds.filter((id) => !foundIds.has(id));
+    const withoutVideo = reels.filter((r) => !(r.localPath || r.s3Key));
+    const validReels = reels.filter((r) => r.localPath || r.s3Key);
+
+    if (validReels.length === 0) {
+      return c.json(
+        {
+          error: "No valid reels to analyze",
+          notFound,
+          withoutVideo: withoutVideo.map((r) => r.id),
+        },
+        400
+      );
+    }
+
+    // Добавляем задачи в очередь
+    const jobIds: string[] = [];
+    for (const reel of validReels) {
+      const jobId =
+        analysisType === "frames"
+          ? await pipelineJobQueue.addAnalyzeFramesJob(reel.id)
+          : await pipelineJobQueue.addAnalyzeJob(reel.id);
+      jobIds.push(jobId);
+    }
+
+    console.log(
+      `[BatchAnalyze] Started ${jobIds.length} ${analysisType} analysis jobs`
+    );
+
+    return c.json({
+      success: true,
+      queued: validReels.length,
+      jobIds,
+      skipped: {
+        notFound,
+        withoutVideo: withoutVideo.map((r) => r.id),
+      },
+      message: `Queued ${validReels.length} reels for ${analysisType} analysis`,
+    });
+  } catch (error) {
+    console.error("Batch analyze error:", error);
+    return c.json({ error: "Failed to start batch analysis" }, 500);
+  }
+});
+
 // Analyze a specific reel
 reelsRouter.post("/:id/analyze", async (c) => {
   try {

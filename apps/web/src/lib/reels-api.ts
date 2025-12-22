@@ -450,3 +450,42 @@ export async function deleteAllReels(): Promise<{
 
   return response.json();
 }
+
+/**
+ * Batch analyze multiple reels
+ */
+export type BatchAnalyzeRequest = {
+  reelIds: string[];
+  analysisType?: "standard" | "frames";
+};
+
+export type BatchAnalyzeResponse = {
+  success: boolean;
+  queued: number;
+  jobIds: string[];
+  skipped: {
+    notFound: string[];
+    withoutVideo: string[];
+  };
+  message: string;
+};
+
+export async function batchAnalyzeReels(
+  request: BatchAnalyzeRequest
+): Promise<BatchAnalyzeResponse> {
+  const response = await fetch(`${API_URL}/api/reels/batch-analyze`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(request),
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to start batch analysis");
+  }
+
+  return response.json();
+}

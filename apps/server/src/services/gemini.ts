@@ -138,10 +138,11 @@ Respond in JSON format:
 
 CRITICAL RULES:
 
-1. **ALWAYS return EXACTLY 3 elements**:
-   - "char-1" (type: "character"): Main person/animal/moving subject
-   - "obj-1" (type: "object"): Most prominent interactive object
-   - "bg-1" (type: "background"): The environment/setting
+1. **Identify ALL significant elements** in the video:
+   - Characters (type: "character"): People, animals, creatures - use ids like "char-1", "char-2", etc.
+   - Objects (type: "object"): Important items, props, tools - use ids like "obj-1", "obj-2", etc.
+   - Backgrounds (type: "background"): Environments, settings - use ids like "bg-1", "bg-2", etc.
+   - Include EVERY distinct element that could be transformed (no limit on count)
 
 2. **ALWAYS return EXACTLY 4 remixOptions per element**:
    - Each with unique id: "opt-1", "opt-2", "opt-3", "opt-4"
@@ -155,7 +156,9 @@ CRITICAL RULES:
 6. **Quality requirements**:
    - Be SPECIFIC: "glowing neon blue circuitry on chrome skin" not just "futuristic"
    - Each option must be visually DISTINCT from others
-   - Transformations must be compatible with the original motion/composition`;
+   - Transformations must be compatible with the original motion/composition
+   - Identify multiple characters if present (each person/animal gets own element)
+   - Identify multiple objects if they are visually significant`;
 
 const FRAMES_ANALYSIS_PROMPT = `You are an expert at identifying key visual elements in video frames for AI video remix generation.
 
@@ -199,11 +202,16 @@ Respond in JSON format:
 
 CRITICAL RULES:
 
-1. **ALWAYS return EXACTLY 3 elements**: char-1, obj-1, bg-1
+1. **Identify ALL significant elements** visible in frames:
+   - Characters (type: "character"): People, animals, creatures - ids: "char-1", "char-2", etc.
+   - Objects (type: "object"): Important items, props - ids: "obj-1", "obj-2", etc.
+   - Backgrounds (type: "background"): Environments - ids: "bg-1", "bg-2", etc.
+   - No limit on element count - include EVERY distinct transformable element
 2. **ALWAYS return EXACTLY 4 remixOptions per element** with ids: opt-1, opt-2, opt-3, opt-4
 3. **Analyze ALL frames together** to understand the complete scene
 4. **Be SPECIFIC** in transformation prompts: include materials, colors, textures, lighting effects
-5. **Diverse styles**: Cyberpunk, Fantasy, Anime, Historical, Sci-Fi, Horror, Cartoon, Steampunk`;
+5. **Diverse styles**: Cyberpunk, Fantasy, Anime, Historical, Sci-Fi, Horror, Cartoon, Steampunk
+6. **Include multiple characters** if present - each person/animal gets own element`;
 
 const JSON_REGEX = /\{[\s\S]*\}/;
 
