@@ -72,11 +72,27 @@ export const videoGenWorker = new Worker<VideoGenJobData, VideoGenJobResult>(
         );
       }
 
+      // Convert local API path to public URL for Kling API
+      let publicVideoUrl = sourceVideoUrl;
+      const publicBaseUrl = process.env.PUBLIC_URL || "";
+
+      // If it's a local API path, prepend the public base URL
+      if (sourceVideoUrl.startsWith("/api/files/reels/")) {
+        if (!publicBaseUrl) {
+          throw new Error(
+            "PUBLIC_URL environment variable is required for Kling API. " +
+              "Set it to your server's public URL (e.g., https://srv-trender.balkhaev.com)"
+          );
+        }
+        publicVideoUrl = `${publicBaseUrl}${sourceVideoUrl}`;
+        console.log(`[VideoGenQueue] Using public URL: ${publicVideoUrl}`);
+      }
+
       const startTime = Date.now();
       const kling = getKlingService();
 
       // Generate video using Kling OmniVideo with progress callback
-      const result = await kling.generateVideoToVideo(sourceVideoUrl, prompt, {
+      const result = await kling.generateVideoToVideo(publicVideoUrl, prompt, {
         duration: options?.duration || 5,
         aspectRatio: options?.aspectRatio || "auto",
         keepAudio: options?.keepAudio,
