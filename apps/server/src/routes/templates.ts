@@ -9,7 +9,7 @@ import {
 } from "../schemas/openapi";
 import { isKlingConfigured } from "../services/kling";
 import { videoGenJobQueue } from "../services/queues";
-import { getReelVideoUrl } from "../services/s3";
+import { getReelVideoPublicUrl } from "../services/s3";
 
 // Schemas moved to centralized location
 
@@ -376,7 +376,8 @@ templatesRouter.openapi(generateFromTemplateRoute, async (c) => {
 
   if (!template) return c.json({ error: "Template not found" }, 404);
 
-  const sourceVideoUrl = await getReelVideoUrl(template.reel);
+  // Use public URL for Kling API (needs direct access to video file)
+  const sourceVideoUrl = getReelVideoPublicUrl(template.reel);
   if (!sourceVideoUrl) {
     return c.json({ error: "No source video available" }, 400);
   }

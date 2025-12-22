@@ -300,7 +300,8 @@ export class KlingService {
       length: prompt.length,
       text: prompt.slice(0, 150),
     });
-    this.log("🎬", "Референс видео", { url: sourceVideoUrl.slice(0, 80) });
+    this.log("🎬", "Референс видео (полный URL)", { url: sourceVideoUrl });
+    console.log("[Kling] Full source video URL:", sourceVideoUrl);
 
     // Log image references if present
     if (options.imageUrls?.length) {

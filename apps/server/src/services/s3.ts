@@ -246,8 +246,8 @@ class S3Service {
 export const s3Service = new S3Service();
 
 /**
- * Get video URL for a reel
- * Returns S3 URL if available, otherwise falls back to videoUrl field
+ * Get video URL for a reel (for internal API use)
+ * Returns API endpoint path, not a public URL
  */
 export function getReelVideoUrl(reel: {
   id: string;
@@ -274,4 +274,32 @@ export function getReelVideoUrl(reel: {
 export function getS3PublicUrl(key: string): string {
   // For MinIO/S3, construct direct URL
   return `${S3_ENDPOINT}/${S3_BUCKET}/${key}`;
+}
+
+/**
+ * Get public video URL for a reel (for external services like Kling API)
+ * Returns direct S3 URL that can be accessed from the internet
+ */
+export function getReelVideoPublicUrl(reel: {
+  id: string;
+  s3Key?: string | null;
+  videoUrl?: string | null;
+}): string | null {
+  // If S3 key is available, return public S3 URL
+  if (reel.s3Key && isS3Configured()) {
+    const url = getS3PublicUrl(reel.s3Key);
+    console.log(`[S3] Public URL for reel ${reel.id}: ${url}`);
+    return url;
+  }
+
+  // Fall back to direct video URL (e.g., Instagram URL)
+  if (reel.videoUrl) {
+    console.log(
+      `[S3] Using direct videoUrl for reel ${reel.id}: ${reel.videoUrl}`
+    );
+    return reel.videoUrl;
+  }
+
+  console.log(`[S3] No video URL available for reel ${reel.id}`);
+  return null;
 }
