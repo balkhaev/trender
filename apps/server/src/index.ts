@@ -4,6 +4,7 @@ import { apiReference } from "@scalar/hono-api-reference";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { server } from "./config";
+import { tracingMiddleware } from "./middleware/tracing";
 import { authRouter } from "./routes/auth";
 import { debugRouter } from "./routes/debug";
 import { filesRouter } from "./routes/files";
@@ -66,6 +67,7 @@ internalApi.route("/kling", klingRouter.klingRouter);
 // ============================================
 const app = new OpenAPIHono();
 
+app.use(tracingMiddleware);
 app.use(logger());
 app.use(
   "/*",

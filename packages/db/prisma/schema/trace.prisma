@@ -1,0 +1,87 @@
+enum SpanKind {
+  internal // Внутренняя операция
+  server // HTTP входящий запрос
+  client // HTTP исходящий запрос
+  producer // Отправка в очередь
+  consumer // Обработка из очереди
+}
+
+enum SpanStatus {
+  unset
+  ok
+  error
+}
+
+model Trace {
+  id           String     @id @default(uuid())
+
+  traceId      String     @unique
+  name         String // Название операции верхнего уровня
+
+  // Контекст
+  rootService  String // "server", "scrapper", "video-frames"
+  rootPath     String? // HTTP path который инициировал trace
+  userId       String?
+
+  // Timing
+  startedAt    DateTime
+  endedAt      DateTime?
+  durationMs   Int?
+
+  // Status
+  status       SpanStatus @default(unset)
+  errorMessage String?
+
+  // Metadata
+  metadata     Json?
+
+  // Relations
+  spans        TraceSpan[]
+
+  createdAt    DateTime   @default(now())
+
+  @@index([traceId])
+  @@index([startedAt])
+  @@index([status])
+  @@index([rootService])
+}
+
+model TraceSpan {
+  id           String     @id @default(uuid())
+
+  // Trace relationship
+  traceId      String
+  trace        Trace      @relation(fields: [traceId], references: [traceId], onDelete: Cascade)
+
+  // Span identification
+  spanId       String
+  parentSpanId String?
+
+  // Описание
+  name         String
+  kind         SpanKind   @default(internal)
+  service      String // "server", "scrapper", "video-frames"
+
+  // Timing
+  startedAt    DateTime
+  endedAt      DateTime?
+  durationMs   Int?
+
+  // Status
+  status       SpanStatus @default(unset)
+  errorMessage String?
+
+  // Attributes (OpenTelemetry-style)
+  attributes   Json?
+
+  // Events (OpenTelemetry-style)
+  events       Json?
+
+  createdAt    DateTime   @default(now())
+
+  @@index([traceId])
+  @@index([spanId])
+  @@index([parentSpanId])
+  @@index([service])
+  @@index([startedAt])
+}
