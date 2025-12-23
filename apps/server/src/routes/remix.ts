@@ -73,21 +73,39 @@ app.openapi(simpleDataRoute, async (c) => {
   const reel = analysis.template?.reel;
   const videoUrl = reel ? buildReelVideoUrl(reel) : null;
 
-  // Parse elements
-  const elements = (
-    analysis.elements as Array<{
+  // Parse elements - fallback to scene elements if analysis.elements is empty
+  let rawElements = analysis.elements as Array<{
+    id: string;
+    type: "character" | "object" | "background";
+    label: string;
+    description: string;
+    remixOptions: Array<{
       id: string;
-      type: "character" | "object" | "background";
       label: string;
-      description: string;
-      remixOptions: Array<{
-        id: string;
-        label: string;
-        icon: string;
-        prompt: string;
-      }>;
-    }>
-  ).map((el) => ({
+      icon: string;
+      prompt: string;
+    }>;
+  }>;
+
+  // If no elements at analysis level, aggregate from scenes
+  if (
+    (!rawElements || rawElements.length === 0) &&
+    analysis.videoScenes.length > 0
+  ) {
+    const elementMap = new Map<string, (typeof rawElements)[0]>();
+    for (const scene of analysis.videoScenes) {
+      const sceneElements = scene.elements as typeof rawElements;
+      for (const el of sceneElements || []) {
+        const key = `${el.type}-${el.label.toLowerCase()}`;
+        if (!elementMap.has(key)) {
+          elementMap.set(key, el);
+        }
+      }
+    }
+    rawElements = Array.from(elementMap.values());
+  }
+
+  const elements = rawElements.map((el) => ({
     ...el,
     thumbnailUrl: undefined,
     allowCustomImage: true,
@@ -296,15 +314,33 @@ app.openapi(expertDataRoute, async (c) => {
   const reel = analysis.template?.reel;
   const videoUrl = reel ? buildReelVideoUrl(reel) : null;
 
-  // Parse elements for reference
-  const elements = (
-    analysis.elements as Array<{
-      id: string;
-      type: string;
-      label: string;
-      description: string;
-    }>
-  ).map((el) => ({
+  // Parse elements for reference - fallback to scene elements if analysis.elements is empty
+  let rawExpertElements = analysis.elements as Array<{
+    id: string;
+    type: string;
+    label: string;
+    description: string;
+  }>;
+
+  // If no elements at analysis level, aggregate from scenes
+  if (
+    (!rawExpertElements || rawExpertElements.length === 0) &&
+    analysis.videoScenes.length > 0
+  ) {
+    const elementMap = new Map<string, (typeof rawExpertElements)[0]>();
+    for (const scene of analysis.videoScenes) {
+      const sceneElements = scene.elements as typeof rawExpertElements;
+      for (const el of sceneElements || []) {
+        const key = `${el.type}-${el.label.toLowerCase()}`;
+        if (!elementMap.has(key)) {
+          elementMap.set(key, el);
+        }
+      }
+    }
+    rawExpertElements = Array.from(elementMap.values());
+  }
+
+  const elements = rawExpertElements.map((el) => ({
     id: el.id,
     type: el.type,
     label: el.label,

@@ -399,6 +399,7 @@ export async function analyzeReelWithScenes(
     // 4. Analyze each scene
     const progressPerScene = 70 / scenesToProcess.length;
     const allTags: string[] = [];
+    const allElements: ElementWithOptions[] = [];
 
     for (let i = 0; i < scenesToProcess.length; i++) {
       const scene = scenesToProcess[i];
@@ -444,6 +445,9 @@ export async function analyzeReelWithScenes(
       // Collect tags
       allTags.push(...sceneAnalysis.tags);
 
+      // Collect elements for aggregation
+      allElements.push(...elementsWithOptions);
+
       // Upload thumbnail if available
       let thumbnailUrl: string | null = null;
       let thumbnailS3Key: string | null = null;
@@ -476,12 +480,35 @@ export async function analyzeReelWithScenes(
       });
     }
 
-    // 5. Update analysis with aggregated tags
+    // 5. Update analysis with aggregated tags and elements
     const uniqueTags = [...new Set(allTags)];
+
+    // Aggregate unique elements by label (merge remix options if same element appears in multiple scenes)
+    const elementMap = new Map<string, ElementWithOptions>();
+    for (const el of allElements) {
+      const key = `${el.type}-${el.label.toLowerCase()}`;
+      if (elementMap.has(key)) {
+        // Merge remix options (avoid duplicates)
+        const existing = elementMap.get(key)!;
+        const existingOptionIds = new Set(
+          existing.remixOptions.map((o) => o.id)
+        );
+        for (const opt of el.remixOptions) {
+          if (!existingOptionIds.has(opt.id)) {
+            existing.remixOptions.push(opt);
+          }
+        }
+      } else {
+        elementMap.set(key, { ...el });
+      }
+    }
+    const aggregatedElements = Array.from(elementMap.values());
+
     await prisma.videoAnalysis.update({
       where: { id: savedAnalysis.id },
       data: {
         tags: uniqueTags,
+        elements: aggregatedElements,
       },
     });
 
