@@ -487,6 +487,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+from tracing import TracingMiddleware
+
+app.add_middleware(TracingMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

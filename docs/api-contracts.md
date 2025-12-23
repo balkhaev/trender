@@ -20,12 +20,38 @@
 **Query параметры:**
 ```typescript
 {
+  type?: 'trends' | 'community' | 'bookmarks';  // default: 'trends'
   limit?: number;        // default: 20, max: 50
   cursor?: string;       // ID последнего элемента для пагинации
   category?: string;     // фильтр по категории
   tags?: string;         // comma-separated теги
   sort?: 'popular' | 'recent' | 'trending';  // default: 'popular'
 }
+```
+
+#### Типы фидов
+
+| type | Описание | Требует авторизации |
+|------|----------|---------------------|
+| `trends` | Отобранные редакцией темплейты (isFeatured=true) | Нет |
+| `community` | Все опубликованные темплейты от пользователей | Нет |
+| `bookmarks` | Сохранённые в закладки темплейты текущего пользователя | Да |
+
+**Примеры запросов:**
+```bash
+# Тренды (по умолчанию)
+GET /api/templates/feed
+GET /api/templates/feed?type=trends
+
+# Все темплейты сообщества
+GET /api/templates/feed?type=community
+
+# Закладки пользователя (требует авторизации)
+GET /api/templates/feed?type=bookmarks
+
+# С фильтрами
+GET /api/templates/feed?type=community&category=dance&sort=popular
+GET /api/templates/feed?type=trends&tags=viral,fashion&limit=10
 ```
 
 **Ответ:**
@@ -39,6 +65,7 @@
     thumbnailUrl: string;
     previewVideoUrl?: string;
     generationCount: number;
+    isBookmarked: boolean;     // true если пользователь добавил в закладки
     reel: {
       id: string;
       author: string | null;
@@ -52,6 +79,58 @@
   }>;
   nextCursor: string | null;
   hasMore: boolean;
+}
+```
+
+---
+
+### GET /api/templates/search
+
+Поиск темплейтов по названию, тегам и категории.
+
+**Query параметры:**
+```typescript
+{
+  q: string;             // поисковый запрос (обязательный)
+  limit?: number;        // default: 20, max: 50
+  cursor?: string;       // ID для пагинации
+}
+```
+
+**Примеры запросов:**
+```bash
+# Поиск по ключевому слову
+GET /api/templates/search?q=dance
+
+# С пагинацией
+GET /api/templates/search?q=fashion&limit=10&cursor=abc123
+```
+
+**Ответ:** идентичен `/api/templates/feed`
+
+---
+
+### POST /api/templates/{id}/bookmark
+
+Добавить темплейт в закладки. Требует авторизации.
+
+**Ответ:**
+```typescript
+{
+  bookmarked: true;
+}
+```
+
+---
+
+### DELETE /api/templates/{id}/bookmark
+
+Удалить темплейт из закладок. Требует авторизации.
+
+**Ответ:**
+```typescript
+{
+  bookmarked: false;
 }
 ```
 

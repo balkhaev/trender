@@ -151,8 +151,8 @@ class TracingService {
             durationMs,
             status: pending?.status ?? "ok",
             errorMessage: pending?.errorMessage,
-            attributes: pending?.attributes as object,
-            events: pending?.events as unknown[],
+            attributes: (pending?.attributes as object) ?? undefined,
+            events: (pending?.events as object[]) ?? undefined,
           },
         });
 

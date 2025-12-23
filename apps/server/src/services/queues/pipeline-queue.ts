@@ -254,6 +254,8 @@ export const pipelineWorker = new Worker<PipelineJobData, PipelineJobResult>(
   {
     connection: redis,
     concurrency: 3, // Process up to 3 reels in parallel (I/O bound)
+    lockDuration: 5 * 60 * 1000, // 5 минут - для долгих операций Gemini
+    stalledInterval: 60 * 1000, // Проверять stalled каждую минуту
   }
 );
 
@@ -331,16 +333,16 @@ export const pipelineJobQueue = {
 
   /**
    * Add an analyze-only job (requires downloaded video)
-   * Uses enchanting analysis (Gemini + ChatGPT) by default
+   * Uses scene-based analysis (PySceneDetect + Gemini + ChatGPT)
    */
   async addAnalyzeJob(reelId: string): Promise<string> {
     const jobId = `analyze-${reelId}-${Date.now()}`;
 
     // Сначала добавляем job в очередь, потом обновляем статус
-    // По умолчанию используем enchanting (Gemini + ChatGPT)
+    // Используем scenes анализ - определение сцен + элементы + ChatGPT варианты
     const job = await pipelineQueue.add(
-      "analyze-enchanting",
-      { reelId, action: "analyze-enchanting" },
+      "analyze-scenes",
+      { reelId, action: "analyze-scenes" },
       { jobId }
     );
 

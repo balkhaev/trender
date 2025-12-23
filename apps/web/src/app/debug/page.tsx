@@ -5,6 +5,7 @@ import { DebugAIMetrics } from "@/components/debug/debug-ai-metrics";
 import { DebugLogsTable } from "@/components/debug/debug-logs-table";
 import { DebugOverview } from "@/components/debug/debug-overview";
 import { HealthAlerts } from "@/components/debug/health-alerts";
+import { TraceList } from "@/components/debug/trace-list";
 import { QueueManager } from "@/components/queue-manager";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -27,6 +28,7 @@ export default function DebugPage() {
       <Tabs onValueChange={setActiveTab} value={activeTab}>
         <TabsList className="mb-6">
           <TabsTrigger value="overview">Обзор</TabsTrigger>
+          <TabsTrigger value="traces">Traces</TabsTrigger>
           <TabsTrigger value="logs">Логи</TabsTrigger>
           <TabsTrigger value="ai">AI сервисы</TabsTrigger>
           <TabsTrigger value="queues">Очереди</TabsTrigger>
@@ -34,6 +36,10 @@ export default function DebugPage() {
 
         <TabsContent value="overview">
           <DebugOverview />
+        </TabsContent>
+
+        <TabsContent value="traces">
+          <TraceList />
         </TabsContent>
 
         <TabsContent value="logs">

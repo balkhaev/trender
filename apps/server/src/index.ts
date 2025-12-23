@@ -59,6 +59,9 @@ internalApi.route("/trim", trimRouter);
 internalApi.route("/debug", debugRouter);
 internalApi.route("/v1/auth", authRouter);
 
+const tracesModule = await import("./routes/traces");
+internalApi.route("/traces", tracesModule.tracesRouter);
+
 const klingRouter = await import("./routes/kling");
 internalApi.route("/kling", klingRouter.klingRouter);
 
