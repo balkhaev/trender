@@ -1,8 +1,24 @@
 import { existsSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import prisma from "@trender/db";
-import { Hono } from "hono";
+import {
+  AnalyzeDownloadedRequestSchema,
+  AnalyzedVideoResponseSchema,
+  AnalyzeReelRequestSchema,
+  AnalyzeVideoRequestSchema,
+  ErrorResponseSchema,
+  GenerateVideoRequestSchema,
+  NotFoundResponseSchema,
+  UpdateAnalysisRequestSchema,
+  UploadImageRequestSchema,
+  UploadReferenceResponseSchema,
+  VideoAnalysisDbSchema,
+  VideoAnalysisListQuerySchema,
+  VideoGenerationListQuerySchema,
+  VideoGenerationSchema,
+} from "../schemas/openapi";
 import { getGeminiService, type VideoAnalysis } from "../services/gemini";
 import { getDownloadsPath } from "../services/instagram/downloader";
 import { isKlingConfigured } from "../services/kling";
@@ -15,7 +31,7 @@ declare const Bun: {
   file(path: string): Blob;
 };
 
-const video = new Hono();
+const video = new OpenAPIHono();
 
 const ALLOWED_MIME_TYPES = [
   "video/mp4",
@@ -59,7 +75,508 @@ function saveAnalysis(
   });
 }
 
-video.post("/analyze", async (c) => {
+// --- Route Definitions ---
+
+const analyzeRoute = createRoute({
+  method: "post",
+  path: "/analyze",
+  summary: "Analyze uploaded video",
+  description: "Upload a video file and analyze it using Gemini AI",
+  tags: ["Video"],
+  request: {
+    body: {
+      content: {
+        "multipart/form-data": {
+          schema: AnalyzeVideoRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: AnalyzedVideoResponseSchema,
+        },
+      },
+      description: "Video analyzed successfully",
+    },
+    400: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Bad request - invalid file type or size",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Server error during analysis",
+    },
+  },
+});
+
+const analyzeEnchantingRoute = createRoute({
+  method: "post",
+  path: "/analyze-enchanting",
+  summary: "Analyze video with enchanting mode",
+  description:
+    "Analyze video using Gemini for elements detection and ChatGPT for remix options generation",
+  tags: ["Video"],
+  request: {
+    body: {
+      content: {
+        "multipart/form-data": {
+          schema: AnalyzeVideoRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: AnalyzedVideoResponseSchema,
+        },
+      },
+      description: "Video analyzed with enchanting mode",
+    },
+    400: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Bad request - invalid file type or size",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Server error or OpenAI not configured",
+    },
+  },
+});
+
+const analyzeDownloadedRoute = createRoute({
+  method: "post",
+  path: "/analyze-downloaded",
+  summary: "Analyze downloaded video file",
+  description:
+    "Analyze a video file from the downloads folder by hashtag and filename",
+  tags: ["Video"],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: AnalyzeDownloadedRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.boolean(),
+            analysis: z.any(),
+            analysisId: z.string(),
+          }),
+        },
+      },
+      description: "Video analyzed successfully",
+    },
+    400: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Bad request - missing parameters or invalid file",
+    },
+    404: {
+      content: { "application/json": { schema: NotFoundResponseSchema } },
+      description: "File not found",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Server error during analysis",
+    },
+  },
+});
+
+const analyzeReelRoute = createRoute({
+  method: "post",
+  path: "/analyze-reel",
+  summary: "Analyze reel by ID",
+  description:
+    "Analyze a reel from the database, fetching video from local storage or URL",
+  tags: ["Video"],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: AnalyzeReelRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: AnalyzedVideoResponseSchema,
+        },
+      },
+      description: "Reel analyzed successfully",
+    },
+    400: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Bad request - missing parameters or no video available",
+    },
+    404: {
+      content: { "application/json": { schema: NotFoundResponseSchema } },
+      description: "Reel not found in database",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Server error during analysis",
+    },
+  },
+});
+
+const generateRoute = createRoute({
+  method: "post",
+  path: "/generate",
+  summary: "Generate video via Kling AI",
+  description:
+    "Start video-to-video generation using Kling AI based on analysis",
+  tags: ["Video"],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: GenerateVideoRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.boolean(),
+            generationId: z.string(),
+          }),
+        },
+      },
+      description: "Generation job started successfully",
+    },
+    400: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Bad request - missing required parameters",
+    },
+    404: {
+      content: { "application/json": { schema: NotFoundResponseSchema } },
+      description: "Analysis not found",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Server error or Kling API not configured",
+    },
+  },
+});
+
+const updateAnalysisRoute = createRoute({
+  method: "patch",
+  path: "/analysis/{id}",
+  summary: "Update analysis",
+  description: "Update analysis fields for Pro mode editing",
+  tags: ["Video"],
+  request: {
+    params: z.object({
+      id: z.string().openapi({ param: { name: "id", in: "path" } }),
+    }),
+    body: {
+      content: {
+        "application/json": {
+          schema: UpdateAnalysisRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.boolean(),
+            analysis: z.any(),
+          }),
+        },
+      },
+      description: "Analysis updated successfully",
+    },
+    404: {
+      content: { "application/json": { schema: NotFoundResponseSchema } },
+      description: "Analysis not found",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Server error during update",
+    },
+  },
+});
+
+const getGenerationRoute = createRoute({
+  method: "get",
+  path: "/generation/{id}",
+  summary: "Get generation status",
+  description: "Get the current status of a video generation job",
+  tags: ["Video"],
+  request: {
+    params: z.object({
+      id: z.string().openapi({ param: { name: "id", in: "path" } }),
+    }),
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.boolean(),
+            generation: VideoGenerationSchema.extend({
+              analysis: z.any().optional(),
+            }),
+          }),
+        },
+      },
+      description: "Generation status retrieved",
+    },
+    404: {
+      content: { "application/json": { schema: NotFoundResponseSchema } },
+      description: "Generation not found",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Server error",
+    },
+  },
+});
+
+const getGenerationLogsRoute = createRoute({
+  method: "get",
+  path: "/generation/{id}/logs",
+  summary: "Get generation logs",
+  description: "Get logs for a video generation job from the source reel",
+  tags: ["Video"],
+  request: {
+    params: z.object({
+      id: z.string().openapi({ param: { name: "id", in: "path" } }),
+    }),
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.boolean(),
+            generation: z.object({
+              id: z.string(),
+              status: z.string(),
+              progress: z.number(),
+              progressStage: z.string().nullable(),
+              progressMessage: z.string().nullable(),
+              klingProgress: z.number().nullable(),
+              lastActivityAt: z.any().nullable(),
+            }),
+            logs: z.array(
+              z.object({
+                id: z.string(),
+                level: z.string(),
+                stage: z.string(),
+                message: z.string(),
+                createdAt: z.any(),
+              })
+            ),
+          }),
+        },
+      },
+      description: "Generation logs retrieved",
+    },
+    404: {
+      content: { "application/json": { schema: NotFoundResponseSchema } },
+      description: "Generation not found",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Server error",
+    },
+  },
+});
+
+const downloadGenerationRoute = createRoute({
+  method: "get",
+  path: "/generation/{id}/download",
+  summary: "Download generated video",
+  description: "Download the generated video file (redirects if external URL)",
+  tags: ["Video"],
+  request: {
+    params: z.object({
+      id: z.string().openapi({ param: { name: "id", in: "path" } }),
+    }),
+  },
+  responses: {
+    200: {
+      content: {
+        "video/mp4": {
+          schema: z.any(),
+        },
+      },
+      description: "Video file stream",
+    },
+    302: {
+      description: "Redirect to external video URL",
+    },
+    400: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Video not ready yet",
+    },
+    404: {
+      content: { "application/json": { schema: NotFoundResponseSchema } },
+      description: "Generation or video file not found",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Server error",
+    },
+  },
+});
+
+const listAnalysesRoute = createRoute({
+  method: "get",
+  path: "/analyses",
+  summary: "List all analyses",
+  description: "Get a paginated list of all video analyses",
+  tags: ["Video"],
+  request: {
+    query: VideoAnalysisListQuerySchema,
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.boolean(),
+            analyses: z.array(VideoAnalysisDbSchema),
+            total: z.number(),
+            limit: z.number(),
+            offset: z.number(),
+          }),
+        },
+      },
+      description: "List of analyses",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Server error",
+    },
+  },
+});
+
+const listGenerationsRoute = createRoute({
+  method: "get",
+  path: "/generations",
+  summary: "List all generations",
+  description: "Get a paginated list of all video generations",
+  tags: ["Video"],
+  request: {
+    query: VideoGenerationListQuerySchema,
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.boolean(),
+            generations: z.array(
+              VideoGenerationSchema.extend({ analysis: z.any().optional() })
+            ),
+            total: z.number(),
+            limit: z.number(),
+            offset: z.number(),
+          }),
+        },
+      },
+      description: "List of generations",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Server error",
+    },
+  },
+});
+
+const getAnalysisRoute = createRoute({
+  method: "get",
+  path: "/analysis/{id}",
+  summary: "Get analysis by ID",
+  description: "Get a single video analysis with its generations",
+  tags: ["Video"],
+  request: {
+    params: z.object({
+      id: z.string().openapi({ param: { name: "id", in: "path" } }),
+    }),
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.boolean(),
+            analysis: VideoAnalysisDbSchema,
+          }),
+        },
+      },
+      description: "Analysis retrieved",
+    },
+    404: {
+      content: { "application/json": { schema: NotFoundResponseSchema } },
+      description: "Analysis not found",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Server error",
+    },
+  },
+});
+
+const uploadReferenceRoute = createRoute({
+  method: "post",
+  path: "/upload-reference",
+  summary: "Upload reference image",
+  description: "Upload an image to use as reference for remix generation",
+  tags: ["Video"],
+  request: {
+    body: {
+      content: {
+        "multipart/form-data": {
+          schema: UploadImageRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: UploadReferenceResponseSchema,
+        },
+      },
+      description: "Image uploaded successfully",
+    },
+    400: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Bad request - invalid file type or size",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Server error or S3 not configured",
+    },
+  },
+});
+
+// --- Route Handlers ---
+
+video.openapi(analyzeRoute, async (c) => {
   try {
     const formData = await c.req.formData();
     const file = formData.get("video");
@@ -94,7 +611,6 @@ video.post("/analyze", async (c) => {
       file.name
     );
 
-    // Save to database
     const saved = await saveAnalysis(analysis, "upload", undefined, file.name);
 
     return c.json({
@@ -111,8 +627,7 @@ video.post("/analyze", async (c) => {
   }
 });
 
-// Enchanting анализ: Gemini определяет элементы, ChatGPT генерирует варианты
-video.post("/analyze-enchanting", async (c) => {
+video.openapi(analyzeEnchantingRoute, async (c) => {
   try {
     const formData = await c.req.formData();
     const file = formData.get("video");
@@ -139,7 +654,6 @@ video.post("/analyze-enchanting", async (c) => {
       );
     }
 
-    // Проверяем что OpenAI настроен
     if (!isOpenAIConfigured()) {
       return c.json(
         {
@@ -154,19 +668,16 @@ video.post("/analyze-enchanting", async (c) => {
     const openaiService = getOpenAIService();
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    // 1. Gemini анализирует видео и возвращает только элементы
     const elementsAnalysis = await geminiService.processVideoElementsOnly(
       buffer,
       file.type,
       file.name
     );
 
-    // 2. ChatGPT генерирует варианты для каждого элемента
     const enchantingResults = await openaiService.generateEnchantingOptions(
       elementsAnalysis.elements
     );
 
-    // 3. Объединяем элементы с вариантами
     const elementsWithOptions: Array<{
       id: string;
       type: "character" | "object" | "background";
@@ -198,7 +709,6 @@ video.post("/analyze-enchanting", async (c) => {
       elements: elementsWithOptions,
     };
 
-    // Save to database with enchanting mode marker
     const saved = await prisma.videoAnalysis.create({
       data: {
         sourceType: "upload",
@@ -215,7 +725,7 @@ video.post("/analyze-enchanting", async (c) => {
       success: true,
       analysis,
       analysisId: saved.id,
-      mode: "enchanting",
+      mode: "enchanting" as const,
     });
   } catch (error) {
     console.error("Enchanting analysis error:", error);
@@ -226,10 +736,9 @@ video.post("/analyze-enchanting", async (c) => {
   }
 });
 
-video.post("/analyze-downloaded", async (c) => {
+video.openapi(analyzeDownloadedRoute, async (c) => {
   try {
-    const body = await c.req.json();
-    const { hashtag, filename } = body as { hashtag: string; filename: string };
+    const { hashtag, filename } = c.req.valid("json");
 
     if (!(hashtag && filename)) {
       return c.json({ error: "hashtag and filename are required" }, 400);
@@ -267,7 +776,6 @@ video.post("/analyze-downloaded", async (c) => {
       filename
     );
 
-    // Save to database
     const saved = await saveAnalysis(analysis, "download", undefined, filename);
 
     return c.json({
@@ -284,24 +792,20 @@ video.post("/analyze-downloaded", async (c) => {
   }
 });
 
-// Analyze reel by URL (fetches video and analyzes)
-video.post("/analyze-reel", async (c) => {
+video.openapi(analyzeReelRoute, async (c) => {
   try {
-    const body = await c.req.json();
-    const { reelId, url } = body as { reelId: string; url: string };
+    const { reelId, url } = c.req.valid("json");
 
     if (!(reelId && url)) {
       return c.json({ error: "reelId and url are required" }, 400);
     }
 
-    // Get reel from database to check for videoUrl
     const reel = await prisma.reel.findUnique({ where: { id: reelId } });
 
     if (!reel) {
       return c.json({ error: "Reel not found in database" }, 404);
     }
 
-    // If we have a local video file, use it
     const downloadsDir = getDownloadsPath(reel.source);
     let localFile: string | null = null;
 
@@ -320,10 +824,8 @@ video.post("/analyze-reel", async (c) => {
     let buffer: Buffer;
 
     if (localFile) {
-      // Use local file
       buffer = await readFile(localFile);
     } else if (reel.videoUrl) {
-      // Download from videoUrl
       const response = await fetch(reel.videoUrl, {
         headers: {
           "User-Agent":
@@ -366,7 +868,6 @@ video.post("/analyze-reel", async (c) => {
       `${reelId}.mp4`
     );
 
-    // Save to database
     const saved = await saveAnalysis(analysis, "reel", reelId, `${reelId}.mp4`);
 
     return c.json({
@@ -383,23 +884,9 @@ video.post("/analyze-reel", async (c) => {
   }
 });
 
-// Generation options type
-type GenerateRequestBody = {
-  analysisId: string;
-  prompt: string; // Change prompt - what to modify in the video
-  sourceVideoUrl: string; // Source video URL for video-to-video
-  options?: {
-    duration?: 5 | 10;
-    aspectRatio?: "16:9" | "9:16" | "1:1" | "auto";
-    keepAudio?: boolean;
-  };
-};
-
-// Start video generation (Kling video-to-video)
-video.post("/generate", async (c) => {
+video.openapi(generateRoute, async (c) => {
   try {
-    const body = (await c.req.json()) as GenerateRequestBody;
-    const { analysisId, prompt, sourceVideoUrl, options } = body;
+    const { analysisId, prompt, sourceVideoUrl, options } = c.req.valid("json");
 
     if (!analysisId) {
       return c.json({ error: "analysisId is required" }, 400);
@@ -416,7 +903,6 @@ video.post("/generate", async (c) => {
       );
     }
 
-    // Check Kling API is configured
     if (!isKlingConfigured()) {
       return c.json(
         {
@@ -427,7 +913,6 @@ video.post("/generate", async (c) => {
       );
     }
 
-    // Check analysis exists
     const analysis = await prisma.videoAnalysis.findUnique({
       where: { id: analysisId },
     });
@@ -436,7 +921,6 @@ video.post("/generate", async (c) => {
       return c.json({ error: "Analysis not found" }, 404);
     }
 
-    // Add to video generation queue
     const generationId = await videoGenJobQueue.startGeneration(
       analysisId,
       prompt,
@@ -457,11 +941,10 @@ video.post("/generate", async (c) => {
   }
 });
 
-// Update analysis (for Pro mode editing)
-video.patch("/analysis/:id", async (c) => {
+video.openapi(updateAnalysisRoute, async (c) => {
   try {
-    const { id } = c.req.param();
-    const body = await c.req.json();
+    const { id } = c.req.valid("param");
+    const body = c.req.valid("json");
 
     const analysis = await prisma.videoAnalysis.findUnique({
       where: { id },
@@ -471,7 +954,6 @@ video.patch("/analysis/:id", async (c) => {
       return c.json({ error: "Analysis not found" }, 404);
     }
 
-    // Allow updating all editable fields
     const updateData: Record<string, unknown> = {};
     const allowedFields = [
       "subject",
@@ -498,7 +980,7 @@ video.patch("/analysis/:id", async (c) => {
 
     for (const field of allowedFields) {
       if (field in body) {
-        updateData[field] = body[field];
+        updateData[field] = body[field as keyof typeof body];
       }
     }
 
@@ -520,10 +1002,9 @@ video.patch("/analysis/:id", async (c) => {
   }
 });
 
-// Get generation status
-video.get("/generation/:id", async (c) => {
+video.openapi(getGenerationRoute, async (c) => {
   try {
-    const { id } = c.req.param();
+    const { id } = c.req.valid("param");
 
     const generation = await prisma.videoGeneration.findUnique({
       where: { id },
@@ -549,10 +1030,9 @@ video.get("/generation/:id", async (c) => {
   }
 });
 
-// Get generation logs (from source reel)
-video.get("/generation/:id/logs", async (c) => {
+video.openapi(getGenerationLogsRoute, async (c) => {
   try {
-    const { id } = c.req.param();
+    const { id } = c.req.valid("param");
 
     const generation = await prisma.videoGeneration.findUnique({
       where: { id },
@@ -567,7 +1047,6 @@ video.get("/generation/:id/logs", async (c) => {
       return c.json({ error: "Generation not found" }, 404);
     }
 
-    // If we have a source reel, get its logs
     let logs: {
       id: string;
       level: string;
@@ -613,10 +1092,9 @@ video.get("/generation/:id/logs", async (c) => {
   }
 });
 
-// Download generated video file
-video.get("/generation/:id/download", async (c) => {
+video.openapi(downloadGenerationRoute, async (c) => {
   try {
-    const { id } = c.req.param();
+    const { id } = c.req.valid("param");
 
     const generation = await prisma.videoGeneration.findUnique({
       where: { id },
@@ -632,7 +1110,6 @@ video.get("/generation/:id/download", async (c) => {
 
     const filename = `${id}.mp4`;
 
-    // Try S3 first if s3Key is set
     if (generation.s3Key) {
       try {
         const result = await s3Service.getFileStream(generation.s3Key);
@@ -651,11 +1128,9 @@ video.get("/generation/:id/download", async (c) => {
       }
     }
 
-    // Fall back to local file
     const filepath = getVideoGenerationsPath(filename);
 
     if (!existsSync(filepath)) {
-      // If no local file and we have external videoUrl - redirect
       if (generation.videoUrl && !generation.videoUrl.startsWith("/api/")) {
         return c.redirect(generation.videoUrl);
       }
@@ -682,11 +1157,9 @@ video.get("/generation/:id/download", async (c) => {
   }
 });
 
-// List all analyses
-video.get("/analyses", async (c) => {
+video.openapi(listAnalysesRoute, async (c) => {
   try {
-    const limit = Number(c.req.query("limit")) || 50;
-    const offset = Number(c.req.query("offset")) || 0;
+    const { limit, offset } = c.req.valid("query");
 
     const [analyses, total] = await Promise.all([
       prisma.videoAnalysis.findMany({
@@ -718,12 +1191,9 @@ video.get("/analyses", async (c) => {
   }
 });
 
-// List all generations
-video.get("/generations", async (c) => {
+video.openapi(listGenerationsRoute, async (c) => {
   try {
-    const limit = Number(c.req.query("limit")) || 50;
-    const offset = Number(c.req.query("offset")) || 0;
-    const status = c.req.query("status");
+    const { limit, offset, status } = c.req.valid("query");
 
     const where = status ? { status } : {};
 
@@ -756,10 +1226,9 @@ video.get("/generations", async (c) => {
   }
 });
 
-// Get single analysis
-video.get("/analysis/:id", async (c) => {
+video.openapi(getAnalysisRoute, async (c) => {
   try {
-    const { id } = c.req.param();
+    const { id } = c.req.valid("param");
 
     const analysis = await prisma.videoAnalysis.findUnique({
       where: { id },
@@ -787,10 +1256,8 @@ video.get("/analysis/:id", async (c) => {
   }
 });
 
-// Upload image reference for remix generation
-video.post("/upload-reference", async (c) => {
+video.openapi(uploadReferenceRoute, async (c) => {
   try {
-    // Check S3 is configured
     if (!isS3Configured()) {
       return c.json(
         {
@@ -826,16 +1293,13 @@ video.post("/upload-reference", async (c) => {
       );
     }
 
-    // Generate unique ID for this reference image
     const imageId = crypto.randomUUID();
     const extension = file.type.split("/")[1] || "jpg";
     const s3Key = getS3Key("references", `${imageId}.${extension}`);
 
-    // Upload to S3
     const buffer = Buffer.from(await file.arrayBuffer());
     await s3Service.uploadFile(s3Key, buffer, file.type);
 
-    // Return the full public URL that can be used in Kling API
     const url = getReferenceImagePublicUrl(imageId, extension);
 
     return c.json({

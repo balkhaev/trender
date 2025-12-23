@@ -367,3 +367,229 @@ export const TemplateSchema = z
     analysis: AnalysisPreviewSchema.optional(),
   })
   .openapi("Template");
+
+// --- Video API Schemas ---
+
+export const VideoGenerationSchema = z
+  .object({
+    id: z.string().openapi({ description: "Generation ID" }),
+    analysisId: z.string().openapi({ description: "Related analysis ID" }),
+    status: z
+      .enum(["pending", "processing", "completed", "failed"])
+      .openapi({ description: "Generation status" }),
+    progress: z.number().openapi({ description: "Progress percentage 0-100" }),
+    progressStage: z
+      .string()
+      .nullable()
+      .openapi({ description: "Current stage name" }),
+    progressMessage: z
+      .string()
+      .nullable()
+      .openapi({ description: "Human-readable progress message" }),
+    klingProgress: z
+      .number()
+      .nullable()
+      .openapi({ description: "Kling AI progress percentage" }),
+    klingTaskId: z
+      .string()
+      .nullable()
+      .openapi({ description: "Kling AI task ID" }),
+    videoUrl: z
+      .string()
+      .nullable()
+      .openapi({ description: "Generated video URL" }),
+    s3Key: z.string().nullable().openapi({ description: "S3 storage key" }),
+    duration: z
+      .number()
+      .nullable()
+      .openapi({ description: "Video duration in seconds" }),
+    aspectRatio: z.string().nullable().openapi({ description: "Aspect ratio" }),
+    createdAt: z.string().openapi({ description: "Creation timestamp" }),
+    completedAt: z
+      .string()
+      .nullable()
+      .openapi({ description: "Completion timestamp" }),
+    error: z.string().nullable().openapi({ description: "Error message" }),
+    lastActivityAt: z
+      .string()
+      .nullable()
+      .openapi({ description: "Last activity timestamp" }),
+  })
+  .openapi("VideoGeneration");
+
+export const GenerateVideoRequestSchema = z
+  .object({
+    analysisId: z.string().openapi({
+      description: "Analysis ID to use for generation",
+      example: "550e8400-e29b-41d4-a716-446655440000",
+    }),
+    prompt: z.string().openapi({
+      description: "Change prompt - what to modify in the video",
+      example:
+        "Based on @Video1, transform the character into a cyberpunk robot",
+    }),
+    sourceVideoUrl: z.string().openapi({
+      description: "Source video URL for video-to-video generation",
+      example: "http://localhost:3000/api/files/reels/ABC123",
+    }),
+    options: z
+      .object({
+        duration: z
+          .union([z.literal(5), z.literal(10)])
+          .optional()
+          .openapi({ description: "Video duration in seconds" }),
+        aspectRatio: z
+          .enum(["16:9", "9:16", "1:1", "auto"])
+          .optional()
+          .openapi({ description: "Output aspect ratio" }),
+        keepAudio: z
+          .boolean()
+          .optional()
+          .openapi({ description: "Whether to keep original audio" }),
+      })
+      .optional()
+      .openapi({ description: "Generation options" }),
+  })
+  .openapi("GenerateVideoRequest");
+
+export const AnalyzeDownloadedRequestSchema = z
+  .object({
+    hashtag: z.string().openapi({
+      description: "Hashtag folder name",
+      example: "trending",
+    }),
+    filename: z.string().openapi({
+      description: "Video filename",
+      example: "video123.mp4",
+    }),
+  })
+  .openapi("AnalyzeDownloadedRequest");
+
+export const AnalyzeReelRequestSchema = z
+  .object({
+    reelId: z.string().openapi({
+      description: "Reel ID from database",
+      example: "ABC123",
+    }),
+    url: z.string().openapi({
+      description: "Reel URL",
+      example: "https://instagram.com/reel/ABC123",
+    }),
+  })
+  .openapi("AnalyzeReelRequest");
+
+export const VideoAnalysisListQuerySchema = z.object({
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(50)
+    .openapi({ param: { name: "limit", in: "query" } }),
+  offset: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .default(0)
+    .openapi({ param: { name: "offset", in: "query" } }),
+});
+
+export const VideoGenerationListQuerySchema = z.object({
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(50)
+    .openapi({ param: { name: "limit", in: "query" } }),
+  offset: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .default(0)
+    .openapi({ param: { name: "offset", in: "query" } }),
+  status: z
+    .string()
+    .optional()
+    .openapi({ param: { name: "status", in: "query" } }),
+});
+
+export const VideoAnalysisDbSchema = z
+  .object({
+    id: z.string(),
+    sourceType: z.string(),
+    sourceId: z.string().nullable(),
+    fileName: z.string().nullable(),
+    duration: z.number().nullable(),
+    aspectRatio: z.string().nullable(),
+    elements: z.any(),
+    tags: z.array(z.string()).nullable(),
+    analysisType: z.string().nullable(),
+    subject: z.string().nullable(),
+    action: z.string().nullable(),
+    style: z.string().nullable(),
+    klingPrompt: z.string().nullable(),
+    veo3Prompt: z.string().nullable(),
+    createdAt: z.string(),
+    generations: z.array(VideoGenerationSchema).optional(),
+  })
+  .openapi("VideoAnalysisDb");
+
+export const UploadReferenceResponseSchema = z
+  .object({
+    success: z.boolean(),
+    url: z.string().openapi({ description: "Public URL for the image" }),
+    s3Key: z.string().openapi({ description: "S3 storage key" }),
+    imageId: z.string().openapi({ description: "Unique image identifier" }),
+  })
+  .openapi("UploadReferenceResponse");
+
+export const AnalyzeVideoRequestSchema = z.object({
+  video: z.any().openapi({
+    type: "string",
+    format: "binary",
+    description: "Video file to analyze (max 100MB)",
+  }),
+});
+
+export const AnalyzedVideoResponseSchema = z
+  .object({
+    success: z.boolean(),
+    analysis: VideoAnalysisDbSchema,
+    analysisId: z.string(),
+    mode: z.string().optional(),
+  })
+  .openapi("AnalyzedVideoResponse");
+
+export const UpdateAnalysisRequestSchema = z
+  .object({
+    subject: z.string().optional(),
+    action: z.string().optional(),
+    environment: z.string().optional(),
+    cameraStyle: z.string().optional(),
+    mood: z.string().optional(),
+    colorPalette: z.string().optional(),
+    style: z.string().optional(),
+    duration: z.number().optional(),
+    aspectRatio: z.string().optional(),
+    scenes: z.any().optional(),
+    characters: z.any().optional(),
+    objects: z.any().optional(),
+    cameraMovements: z.any().optional(),
+    lighting: z.string().optional(),
+    transitions: z.any().optional(),
+    audio: z.any().optional(),
+    textOverlays: z.any().optional(),
+    pacing: z.string().optional(),
+    klingPrompt: z.string().optional(),
+    tags: z.array(z.string()).optional(),
+  })
+  .openapi("UpdateAnalysisRequest");
+
+export const UploadImageRequestSchema = z.object({
+  file: z.any().openapi({
+    type: "string",
+    format: "binary",
+    description: "Image file to upload (max 20MB)",
+  }),
+});

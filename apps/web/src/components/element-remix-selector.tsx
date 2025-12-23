@@ -2,7 +2,7 @@
 
 import { ImagePlus, Mountain, Package, Trash2, User } from "lucide-react";
 import Image from "next/image";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -247,38 +247,35 @@ export function ElementRemixSelector({
 
       setSelections((prev) => {
         const existing = prev.find((s) => s.elementId === elementId);
-        let newSelections: ElementSelection[];
 
         if (existing) {
           // Update existing selection
           const updated = { ...existing, ...update };
           // Remove if no option selected and no custom image
           if (updated.selectedOptionId || updated.customImageUrl) {
-            newSelections = prev.map((s) =>
-              s.elementId === elementId ? updated : s
-            );
-          } else {
-            newSelections = prev.filter((s) => s.elementId !== elementId);
+            return prev.map((s) => (s.elementId === elementId ? updated : s));
           }
-        } else {
-          // Create new selection
-          newSelections = [
-            ...prev,
-            {
-              elementId,
-              elementType: element.type,
-              selectedOptionId: null,
-              ...update,
-            },
-          ];
+          return prev.filter((s) => s.elementId !== elementId);
         }
-
-        onSelectionChange(newSelections);
-        return newSelections;
+        // Create new selection
+        return [
+          ...prev,
+          {
+            elementId,
+            elementType: element.type,
+            selectedOptionId: null,
+            ...update,
+          },
+        ];
       });
     },
-    [elements, onSelectionChange]
+    [elements]
   );
+
+  // Notify parent when selections change
+  useEffect(() => {
+    onSelectionChange(selections);
+  }, [selections, onSelectionChange]);
 
   // Handle option selection
   const handleSelect = useCallback(

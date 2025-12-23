@@ -148,19 +148,21 @@ Return JSON:
 
 RULES:
 
-1. **tags**: 3-5 short tags describing video theme/style/mood (lowercase, english)
+1. **ELEMENT COUNT**: Return EXACTLY 3 to 6 elements. NOT less than 3, NOT more than 6. If more detected, keep only the 6 most visually significant. RANK by visual importance.
 
-2. **elements**: Identify ALL significant elements:
+2. **tags**: 3-5 short tags describing video theme/style/mood (lowercase, english)
+
+3. **elements**: Identify the most significant elements, ranked by visual importance:
    - Characters: "char-1", "char-2" (people, animals)
    - Objects: "obj-1", "obj-2" (important items)
    - Backgrounds: "bg-1" (environments)
 
-3. **remixOptions**: 3 to 6 per element, RANKED by visual impact:
+4. **remixOptions**: EXACTLY 4 per element. NOT 3, NOT 5, NOT 6. EXACTLY 4. RANKED by visual impact:
    - First options = most dramatic/viral transformations
    - Last options = subtle but interesting changes
    - Diverse styles: Cyberpunk, Fantasy, Anime, Historical, Sci-Fi, Horror
 
-4. **label**: 2-3 words | **icon**: single emoji | **prompt**: specific visual details`;
+5. **label**: 2-3 words | **icon**: single emoji | **prompt**: specific visual details`;
 
 // Промпт для анализа БЕЗ генерации вариантов (для enchanting режима)
 const ELEMENTS_ONLY_PROMPT = `Identify key visual elements in this video for AI remix. NO remixOptions.
@@ -193,10 +195,11 @@ Return JSON:
 }
 
 RULES:
-1. **tags**: 3-5 short tags describing video theme/style/mood (lowercase, english)
-2. **elements**: Characters (char-1), Objects (obj-1), Backgrounds (bg-1)
-3. **NO remixOptions** - they will be generated separately
-4. **description**: Specific visual details (materials, colors, clothing)`;
+1. **ELEMENT COUNT**: Return EXACTLY 3 to 6 elements. NOT less than 3, NOT more than 6. RANK by visual importance.
+2. **tags**: 3-5 short tags describing video theme/style/mood (lowercase, english)
+3. **elements**: Characters (char-1), Objects (obj-1), Backgrounds (bg-1)
+4. **NO remixOptions** - they will be generated separately
+5. **description**: Specific visual details (materials, colors, clothing)`;
 
 const FRAMES_ELEMENTS_ONLY_PROMPT = `Identify key visual elements in these video frames. NO remixOptions.
 
@@ -213,10 +216,11 @@ Return JSON:
 }
 
 RULES:
-1. **tags**: 3-5 short tags (lowercase, english)
-2. **elements**: Characters (char-1), Objects (obj-1), Backgrounds (bg-1)
-3. **NO remixOptions**
-4. Analyze ALL frames together`;
+1. **ELEMENT COUNT**: Return EXACTLY 3 to 6 elements. NOT less than 3, NOT more than 6. RANK by visual importance across all frames.
+2. **tags**: 3-5 short tags (lowercase, english)
+3. **elements**: Characters (char-1), Objects (obj-1), Backgrounds (bg-1)
+4. **NO remixOptions**
+5. Analyze ALL frames together`;
 
 const FRAMES_ANALYSIS_PROMPT = `Identify key visual elements in these video frames for AI remix.
 
@@ -255,11 +259,12 @@ Return JSON:
 }
 
 RULES:
-1. **tags**: 3-5 short tags (lowercase, english)
-2. **elements**: Characters (char-1), Objects (obj-1), Backgrounds (bg-1)
-3. **remixOptions**: 3 to 6 per element, RANKED by visual impact
-4. Analyze ALL frames together
-5. Diverse styles: Cyberpunk, Fantasy, Anime, Historical, Sci-Fi`;
+1. **ELEMENT COUNT**: Return EXACTLY 3 to 6 elements. NOT less than 3, NOT more than 6. RANK by visual importance.
+2. **tags**: 3-5 short tags (lowercase, english)
+3. **elements**: Characters (char-1), Objects (obj-1), Backgrounds (bg-1)
+4. **remixOptions**: EXACTLY 4 per element. NOT 3, NOT 5, NOT 6. EXACTLY 4. RANKED by visual impact.
+5. Analyze ALL frames together
+6. Diverse styles: Cyberpunk, Fantasy, Anime, Historical, Sci-Fi`;
 
 const JSON_REGEX = /\{[\s\S]*\}/;
 
@@ -363,11 +368,17 @@ function parseRawAnalysis(raw: GeminiRawAnalysis): VideoAnalysis {
       ? Number.parseInt(raw.duration, 10) || null
       : (raw.duration ?? null);
 
+  // Ограничиваем до 6 элементов (берём первые - самые важные по ранжированию AI)
+  let elements = raw.elements || [];
+  if (elements.length > 6) {
+    elements = elements.slice(0, 6);
+  }
+
   return {
     duration,
     aspectRatio: raw.aspectRatio || "9:16",
     tags: raw.tags || [],
-    elements: raw.elements || [],
+    elements,
   };
 }
 

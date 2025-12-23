@@ -4,6 +4,7 @@ import prisma from "@trender/db";
 import { type Job as BullJob, Queue, Worker } from "bullmq";
 import { paths } from "../../config";
 import { getKlingService } from "../kling";
+import { getOpenAIService, isOpenAIConfigured } from "../openai";
 import { redis } from "../redis";
 import { getS3Key, isS3Configured, s3Service } from "../s3";
 import {
@@ -88,35 +89,55 @@ export const videoGenWorker = new Worker<VideoGenJobData, VideoGenJobResult>(
       const publicVideoUrl = sourceVideoUrl;
       console.log(`[VideoGenQueue] Using video URL: ${publicVideoUrl}`);
 
+      // Enhance prompt for Kling using ChatGPT
+      let enhancedPrompt = prompt;
+      if (isOpenAIConfigured()) {
+        await updateProgress(job, {
+          stage: "enhancing",
+          percent: 12,
+          message: "Enhancing prompt for Kling AI...",
+        });
+        const openai = getOpenAIService();
+        enhancedPrompt = await openai.enhancePromptForKling(
+          prompt,
+          generationId
+        );
+        console.log(`[VideoGenQueue] Enhanced prompt: ${enhancedPrompt}`);
+      }
+
       const startTime = Date.now();
       const kling = getKlingService();
 
       // Generate video using Kling OmniVideo with progress callback
-      const result = await kling.generateVideoToVideo(publicVideoUrl, prompt, {
-        duration: options?.duration || 5,
-        aspectRatio: options?.aspectRatio || "auto",
-        keepAudio: options?.keepAudio,
-        imageUrls: options?.imageUrls,
-        elements: options?.elements,
-        onProgress: async (status, klingProgress, message) => {
-          // Map Kling status to our progress percentage (10-60%)
-          let percent = 15;
-          if (status === "processing") {
-            percent =
-              klingProgress !== undefined
-                ? 15 + Math.floor(klingProgress * 0.45)
-                : 30;
-          } else if (status === "completed") {
-            percent = 60;
-          }
-          await updateProgress(job, {
-            stage: "processing",
-            percent,
-            message,
-            klingProgress,
-          });
-        },
-      });
+      const result = await kling.generateVideoToVideo(
+        publicVideoUrl,
+        enhancedPrompt,
+        {
+          duration: options?.duration || 5,
+          aspectRatio: options?.aspectRatio || "auto",
+          keepAudio: options?.keepAudio,
+          imageUrls: options?.imageUrls,
+          elements: options?.elements,
+          onProgress: async (status, klingProgress, message) => {
+            // Map Kling status to our progress percentage (10-60%)
+            let percent = 15;
+            if (status === "processing") {
+              percent =
+                klingProgress !== undefined
+                  ? 15 + Math.floor(klingProgress * 0.45)
+                  : 30;
+            } else if (status === "completed") {
+              percent = 60;
+            }
+            await updateProgress(job, {
+              stage: "processing",
+              percent,
+              message,
+              klingProgress,
+            });
+          },
+        }
+      );
 
       const duration = Math.round((Date.now() - startTime) / 1000);
       console.log(`[VideoGenQueue] Kling API returned after ${duration}s:`, {

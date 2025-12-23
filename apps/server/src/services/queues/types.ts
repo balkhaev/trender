@@ -86,7 +86,7 @@ export type VideoGenJobData = {
 };
 
 export type VideoGenJobProgress = {
-  stage: "pending" | "processing" | "downloading" | "uploading";
+  stage: "pending" | "enhancing" | "processing" | "downloading" | "uploading";
   percent: number;
   message: string;
 };

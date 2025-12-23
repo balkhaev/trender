@@ -16,13 +16,15 @@ export type EnchantingResult = {
 };
 
 const NORMAL_ABSURD_REMIX_PROMPT = `
-Generate 3-6 replacement options for AI video remixing.
+Generate replacement options for AI video remixing.
 
 Input: JSON list of elements with id, type, label, description.
 
-Your task: For EACH element, generate 3 to 6 remixOptions RANKED by visual impact:
-- First options = most dramatic/viral (absurd, meme-like)
-- Last options = more subtle but interesting
+Your task: For EACH element, generate EXACTLY 4 remixOptions RANKED by visual impact:
+- Options 1-2 = most dramatic/viral (absurd, meme-like)
+- Options 3-4 = more subtle but interesting
+
+CRITICAL: You MUST generate EXACTLY 4 options per element. NOT 3, NOT 5, NOT 6. EXACTLY 4.
 
 RULES BY TYPE:
 
@@ -50,13 +52,14 @@ OUTPUT FORMAT:
     "remixOptions": [
       {"id": "opt-1", "label": "2-3 words", "icon": "emoji", "prompt": "Clear replacement description"},
       {"id": "opt-2", "label": "...", "icon": "...", "prompt": "..."},
-      {"id": "opt-3", "label": "...", "icon": "...", "prompt": "..."}
+      {"id": "opt-3", "label": "...", "icon": "...", "prompt": "..."},
+      {"id": "opt-4", "label": "...", "icon": "...", "prompt": "..."}
     ]
   }
 ]
 
 RULES:
-- 3 to 6 options per element (ranked by visual impact)
+- EXACTLY 4 options per element (this is mandatory)
 - Each option must clearly REPLACE the original
 - Concrete visual descriptions, no abstract language
 - Return ONLY valid JSON array
@@ -64,11 +67,93 @@ RULES:
 
 const JSON_REGEX = /\[[\s\S]*\]/;
 
+const ENHANCE_PROMPT_FOR_KLING = `
+You are an expert at writing prompts for Kling AI video generation.
+
+Your task: Take the user's remix prompt and ENHANCE it to maximize visual quality and accuracy in Kling AI.
+
+KLING AI SPECIFICS:
+- Kling uses <<<video_1>>> to reference the source video
+- Kling uses <<<image_1>>>, <<<element_1>>> for image references
+- Kling works best with specific, visual descriptions
+- Focus on: textures, materials, lighting, colors, style
+- Avoid abstract concepts - be concrete and visual
+
+ENHANCEMENT RULES:
+1. Keep ALL original <<<video_1>>>, <<<image_N>>>, <<<element_N>>> references EXACTLY as they are
+2. Expand vague descriptions into specific visual details
+3. Add style keywords: realistic, cinematic, high quality, detailed
+4. Specify lighting, textures, materials where appropriate
+5. Keep the prompt concise but descriptive (max 200 words)
+6. Preserve the original intent and all transformations
+7. Output ONLY the enhanced prompt, nothing else
+
+EXAMPLE:
+Input: "Based on <<<video_1>>>, Replace the cat with a robot, change background to space"
+Output: "Based on <<<video_1>>>, transform the cat into a sleek metallic robot with glowing blue LED eyes, chrome finish with visible joints and gears, maintaining the same pose and movements. Replace the background with a vast cosmic space scene featuring distant galaxies, nebulae in purple and blue hues, and scattered stars, cinematic lighting, high quality, detailed textures."
+`;
+
 export class OpenAIService {
   private readonly client: OpenAI;
 
   constructor(apiKey: string) {
     this.client = new OpenAI({ apiKey });
+  }
+
+  /**
+   * Улучшает промпт для Kling AI через ChatGPT
+   * @param prompt Исходный промпт из buildElementPrompt()
+   * @param generationId ID генерации для логирования
+   * @returns Улучшенный промпт для Kling
+   */
+  async enhancePromptForKling(
+    prompt: string,
+    generationId?: string
+  ): Promise<string> {
+    const logHandle = await aiLogger.startTimer({
+      provider: "openai",
+      operation: "enhancePromptForKling",
+      model: "gpt-4o-mini",
+      reelId: generationId,
+    });
+
+    try {
+      const response = await this.client.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: ENHANCE_PROMPT_FOR_KLING,
+          },
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+        temperature: 0.7,
+        max_tokens: 500,
+      });
+
+      const enhancedPrompt = response.choices[0]?.message?.content?.trim();
+      if (!enhancedPrompt) {
+        throw new Error("Empty response from ChatGPT");
+      }
+
+      await logHandle.success({
+        inputTokens: response.usage?.prompt_tokens,
+        outputTokens: response.usage?.completion_tokens,
+        inputMeta: { originalPrompt: prompt },
+        outputMeta: { enhancedPrompt },
+      });
+
+      return enhancedPrompt;
+    } catch (error) {
+      await logHandle.fail(
+        error instanceof Error ? error : new Error(String(error))
+      );
+      // При ошибке возвращаем оригинальный промпт
+      return prompt;
+    }
   }
 
   /**
@@ -137,9 +222,9 @@ export class OpenAIService {
         if (!(result.id && result.type && result.remixOptions)) {
           throw new Error(`Invalid result structure for element ${result.id}`);
         }
-        if (result.remixOptions.length < 3 || result.remixOptions.length > 6) {
+        if (result.remixOptions.length !== 4) {
           throw new Error(
-            `Expected 3-6 options for element ${result.id}, got ${result.remixOptions.length}`
+            `Expected exactly 4 options for element ${result.id}, got ${result.remixOptions.length}`
           );
         }
       }
