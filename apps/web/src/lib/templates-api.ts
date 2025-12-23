@@ -20,14 +20,32 @@ export type RemixOption = {
 
 // Detectable element in video for context-aware remix
 export type DetectableElement = {
-  id: string; // "char-1", "obj-1", "bg-1"
+  id: string; // "char-1", "obj-1", "bg-1" or "scene0-char-1" for scene-based
   type: "character" | "object" | "background";
   label: string; // "Young Woman", "Coffee Cup", "Kitchen"
   description: string; // Detailed description
   remixOptions: RemixOption[]; // 4 transformation options
 };
 
-export type AnalysisType = "standard" | "frames" | "enchanting";
+// Scene detected by PySceneDetect with its own elements
+export type VideoScene = {
+  id: string;
+  index: number;
+  startTime: number;
+  endTime: number;
+  duration: number;
+  thumbnailUrl: string | null;
+  thumbnailS3Key: string | null;
+  elements: DetectableElement[];
+  generationStatus:
+    | "none"
+    | "pending"
+    | "processing"
+    | "completed"
+    | "original";
+};
+
+export type AnalysisType = "standard" | "frames" | "enchanting" | "scenes";
 
 // Analysis type - focused on elements for remix
 // Legacy fields are kept for backward compatibility with old analyses
@@ -39,6 +57,10 @@ export type TemplateAnalysis = {
   aspectRatio: string;
   // Main data - Smart Remix Elements
   elements?: DetectableElement[];
+  // Scene-based analysis data
+  hasScenes?: boolean;
+  scenesCount?: number;
+  videoScenes?: VideoScene[];
   // Legacy fields (optional, for backward compatibility)
   subject?: string;
   action?: string;
@@ -593,20 +615,5 @@ export async function analyzeReelByFrames(reelId: string): Promise<void> {
 
   if (!response.ok) {
     throw new Error("Failed to start frame analysis");
-  }
-}
-
-// Enchanting analysis: Gemini detects elements, ChatGPT generates remix options
-export async function analyzeReelEnchanting(reelId: string): Promise<void> {
-  const response = await fetch(
-    `${API_URL}/api/reels/${reelId}/analyze-enchanting`,
-    {
-      method: "POST",
-      credentials: "include",
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error("Failed to start enchanting analysis");
   }
 }

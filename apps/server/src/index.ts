@@ -7,7 +7,6 @@ import { server } from "./config";
 import { authRouter } from "./routes/auth";
 import { debugRouter } from "./routes/debug";
 import { filesRouter } from "./routes/files";
-import { jobsRouter } from "./routes/jobs";
 import { pipelineRouter } from "./routes/pipeline";
 import { queuesRouter } from "./routes/queues";
 import { reelsRouter } from "./routes/reels/index";
@@ -17,6 +16,54 @@ import { trimRouter } from "./routes/trim";
 import { video } from "./routes/video";
 import { closeAllQueues, initAllWorkers } from "./services/queues";
 
+// ============================================
+// PUBLIC API (клиентский флоу)
+// ============================================
+const publicApi = new OpenAPIHono();
+
+// Public routes
+publicApi.route("/templates", templatesRouter);
+
+const contentRouterModule = await import("./routes/content");
+publicApi.route("/content", contentRouterModule.contentRouter);
+
+const mediaRouterModule = await import("./routes/media");
+publicApi.route("/media", mediaRouterModule.mediaRouter);
+
+const remixRouterModule = await import("./routes/remix");
+publicApi.route("/remix", remixRouterModule.remixRouter);
+
+const generateRouterModule = await import("./routes/generate");
+publicApi.route("/generate", generateRouterModule.generateRouter);
+
+// ============================================
+// INTERNAL API (админка, дебаг)
+// ============================================
+const internalApi = new OpenAPIHono();
+
+internalApi.openAPIRegistry.registerComponent("securitySchemes", "BearerAuth", {
+  type: "http",
+  scheme: "bearer",
+  bearerFormat: "JWT",
+});
+
+// Internal routes
+internalApi.route("/video", video);
+internalApi.route("/reels", reelsRouter);
+internalApi.route("/trends", trendsRouter);
+internalApi.route("/files", filesRouter);
+internalApi.route("/queues", queuesRouter);
+internalApi.route("/pipeline", pipelineRouter);
+internalApi.route("/trim", trimRouter);
+internalApi.route("/debug", debugRouter);
+internalApi.route("/v1/auth", authRouter);
+
+const klingRouter = await import("./routes/kling");
+internalApi.route("/kling", klingRouter.klingRouter);
+
+// ============================================
+// MAIN APP
+// ============================================
 const app = new OpenAPIHono();
 
 app.use(logger());
@@ -30,51 +77,72 @@ app.use(
   })
 );
 
-// Register OpenAPI documentation route
-app.doc("/doc", {
-  openapi: "3.0.0",
-  info: {
-    version: "1.0.0",
-    title: "Trender API",
-    description:
-      "API for video analysis, Instagram scraping, and AI video generation.",
-  },
+// Health check
+app.get("/", (c) => c.text("OK"));
+
+// Mount all routes under /api
+app.route("/api", publicApi);
+app.route("/api", internalApi);
+
+// ============================================
+// OPENAPI DOCUMENTATION
+// ============================================
+
+// Public API spec
+app.get("/doc/public", (c) => {
+  try {
+    const document = publicApi.getOpenAPIDocument({
+      openapi: "3.0.0",
+      info: {
+        version: "1.0.0",
+        title: "Trender Public API",
+        description:
+          "Публичное API для клиентского приложения. Документация: docs/api-contracts.md",
+      },
+    });
+    return c.json(document);
+  } catch (e) {
+    console.error("[OpenAPI Public] Error:", e);
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
+  }
 });
 
-// Register security scheme for OpenAPI
-app.openAPIRegistry.registerComponent("securitySchemes", "BearerAuth", {
-  type: "http",
-  scheme: "bearer",
-  bearerFormat: "JWT",
+// Internal API spec
+app.get("/doc/internal", (c) => {
+  try {
+    const document = internalApi.getOpenAPIDocument({
+      openapi: "3.0.0",
+      info: {
+        version: "1.0.0",
+        title: "Trender Internal API",
+        description: "Внутреннее API для администрирования и отладки.",
+      },
+    });
+    return c.json(document);
+  } catch (e) {
+    console.error("[OpenAPI Internal] Error:", e);
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 500);
+  }
 });
 
 // Swagger UI
 app.get(
-  "/reference",
+  "/reference/public",
   apiReference({
     theme: "purple",
     layout: "modern",
-    url: "/doc",
+    url: "/doc/public",
   })
 );
 
-app.route("/api/video", video);
-app.route("/api/reels", reelsRouter);
-app.route("/api/templates", templatesRouter);
-app.route("/api/trends", trendsRouter);
-app.route("/api/files", filesRouter);
-app.route("/api/queues", queuesRouter);
-app.route("/api/pipeline", pipelineRouter);
-app.route("/api/jobs", jobsRouter);
-app.route("/api/trim", trimRouter);
-app.route("/api/debug", debugRouter);
-app.route("/api/v1/auth", authRouter);
-
-// Scene-based analysis and generation
-const scenesRouter = await import("./routes/scenes");
-app.route("/api/scenes", scenesRouter.default);
-
-app.get("/", (c) => c.text("OK"));
+app.get(
+  "/reference/internal",
+  apiReference({
+    theme: "purple",
+    layout: "modern",
+    url: "/doc/internal",
+  })
+);
 
 // Initialize workers on startup
 initAllWorkers();

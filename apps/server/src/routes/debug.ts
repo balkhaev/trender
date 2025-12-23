@@ -236,20 +236,112 @@ debugRouter.post("/cleanup", async (c) => {
     const body = await c.req.json();
     const days = body.olderThanDays || 30;
 
-    const [reelLogsDeleted, aiLogsDeleted] = await Promise.all([
-      pipelineLogger.cleanupOldLogs(days),
-      aiLogger.cleanupOldLogs(days),
-    ]);
+    const { jobHealthService } = await import("../services/job-health.service");
+
+    const [reelLogsDeleted, aiLogsDeleted, healthLogsDeleted] =
+      await Promise.all([
+        pipelineLogger.cleanupOldLogs(days),
+        aiLogger.cleanupOldLogs(days),
+        jobHealthService.cleanup(days),
+      ]);
 
     return c.json({
       success: true,
       deleted: {
         reelLogs: reelLogsDeleted,
         aiLogs: aiLogsDeleted,
+        healthLogs: healthLogsDeleted,
       },
     });
   } catch (error) {
     console.error("Failed to cleanup logs:", error);
     return c.json({ error: "Failed to cleanup logs" }, 500);
+  }
+});
+
+// ============================================================================
+// Job Health Endpoints
+// ============================================================================
+
+// Get job health status - проблемные jobs (stalled, slow, failures)
+debugRouter.get("/health", async (c) => {
+  try {
+    const stalledMinutes = Number(c.req.query("stalledMinutes") || "5");
+
+    const { jobHealthService } = await import("../services/job-health.service");
+
+    const problems = await jobHealthService.getProblematicJobs({
+      stalledThresholdMinutes: stalledMinutes,
+    });
+
+    const hasProblems =
+      problems.stalled.length > 0 ||
+      problems.slow.length > 0 ||
+      problems.recentFailures.length > 0;
+
+    return c.json({
+      status: hasProblems ? "unhealthy" : "healthy",
+      timestamp: new Date().toISOString(),
+      problems,
+      summary: {
+        stalledCount: problems.stalled.length,
+        slowCount: problems.slow.length,
+        recentFailuresCount: problems.recentFailures.length,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to get health status:", error);
+    return c.json({ error: "Failed to get health status" }, 500);
+  }
+});
+
+// Get stalled jobs only
+debugRouter.get("/stalled-jobs", async (c) => {
+  try {
+    const thresholdMinutes = Number(c.req.query("threshold") || "5");
+
+    const { jobHealthService } = await import("../services/job-health.service");
+
+    const stalledJobs = await jobHealthService.getStalledJobs(thresholdMinutes);
+
+    return c.json({
+      count: stalledJobs.length,
+      thresholdMinutes,
+      jobs: stalledJobs,
+    });
+  } catch (error) {
+    console.error("Failed to get stalled jobs:", error);
+    return c.json({ error: "Failed to get stalled jobs" }, 500);
+  }
+});
+
+// Get active jobs
+debugRouter.get("/active-jobs", async (c) => {
+  try {
+    const { jobHealthService } = await import("../services/job-health.service");
+
+    const activeJobs = await jobHealthService.getActiveJobs();
+
+    return c.json({
+      count: activeJobs.length,
+      jobs: activeJobs,
+    });
+  } catch (error) {
+    console.error("Failed to get active jobs:", error);
+    return c.json({ error: "Failed to get active jobs" }, 500);
+  }
+});
+
+// Get queue health stats
+debugRouter.get("/queue-health", async (c) => {
+  try {
+    const { jobHealthService } = await import("../services/job-health.service");
+
+    const stats = await jobHealthService.getQueueStats();
+
+    return c.json({ stats });
+  } catch (error) {
+    console.error("Failed to get queue health stats:", error);
+    return c.json({ error: "Failed to get queue health stats" }, 500);
   }
 });

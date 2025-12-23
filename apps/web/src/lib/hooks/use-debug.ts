@@ -110,3 +110,137 @@ export function useCleanupLogs() {
     },
   });
 }
+
+// ============================================================================
+// Job Health Hooks
+// ============================================================================
+
+/**
+ * Get job health status - проблемные jobs
+ */
+export function useHealthStatus(stalledMinutes?: number) {
+  const { getHealthStatus } = require("../debug-api");
+
+  return useQuery<{
+    status: "healthy" | "unhealthy";
+    timestamp: string;
+    problems: {
+      stalled: Array<{
+        id: string;
+        queueName: string;
+        jobId: string;
+        entityId: string | null;
+        entityType: string | null;
+        substage: string | null;
+        lastActivityAt: string;
+        startedAt: string;
+        minutesSinceActivity: number;
+      }>;
+      slow: Array<{
+        id: string;
+        queueName: string;
+        jobId: string;
+        entityId: string | null;
+        entityType: string | null;
+        substage: string | null;
+        lastActivityAt: string;
+        startedAt: string;
+        minutesSinceActivity: number;
+      }>;
+      recentFailures: Array<{
+        id: string;
+        queueName: string;
+        jobId: string;
+        entityId: string | null;
+        completedAt: string | null;
+        alertMessage: string | null;
+      }>;
+    };
+    summary: {
+      stalledCount: number;
+      slowCount: number;
+      recentFailuresCount: number;
+    };
+  }>({
+    queryKey: ["debug", "health", stalledMinutes],
+    queryFn: () => getHealthStatus(stalledMinutes),
+    refetchInterval: 10_000, // 10 sec
+  });
+}
+
+/**
+ * Get stalled jobs only
+ */
+export function useStalledJobs(thresholdMinutes?: number) {
+  const { getStalledJobs } = require("../debug-api");
+
+  return useQuery<{
+    count: number;
+    thresholdMinutes: number;
+    jobs: Array<{
+      id: string;
+      queueName: string;
+      jobId: string;
+      entityId: string | null;
+      entityType: string | null;
+      substage: string | null;
+      lastActivityAt: string;
+      startedAt: string;
+      minutesSinceActivity: number;
+    }>;
+  }>({
+    queryKey: ["debug", "stalled-jobs", thresholdMinutes],
+    queryFn: () => getStalledJobs(thresholdMinutes),
+    refetchInterval: 15_000, // 15 sec
+  });
+}
+
+/**
+ * Get active jobs
+ */
+export function useActiveJobs() {
+  const { getActiveJobs } = require("../debug-api");
+
+  return useQuery<{
+    count: number;
+    jobs: Array<{
+      id: string;
+      queueName: string;
+      jobId: string;
+      entityId: string | null;
+      entityType: string | null;
+      substage: string | null;
+      startedAt: string;
+      lastActivityAt: string;
+      durationMs: number;
+    }>;
+  }>({
+    queryKey: ["debug", "active-jobs"],
+    queryFn: () => getActiveJobs(),
+    refetchInterval: 5000, // 5 sec
+  });
+}
+
+/**
+ * Get queue health stats
+ */
+export function useQueueHealthStats() {
+  const { getQueueHealthStats } = require("../debug-api");
+
+  return useQuery<{
+    stats: Record<
+      string,
+      {
+        active: number;
+        stalled: number;
+        completedLast24h: number;
+        failedLast24h: number;
+        avgDurationMs: number | null;
+      }
+    >;
+  }>({
+    queryKey: ["debug", "queue-health"],
+    queryFn: () => getQueueHealthStats(),
+    refetchInterval: 15_000, // 15 sec
+  });
+}

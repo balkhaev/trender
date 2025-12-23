@@ -51,6 +51,7 @@ model VideoAnalysis {
   template    Template?
   videoScenes VideoScene[]
   compositeGenerations CompositeGeneration[]
+  generationConfigs GenerationConfig[]
 
   @@index([sourceType])
   @@index([sourceId])
@@ -63,6 +64,10 @@ model VideoGeneration {
   jobId      String?       @unique  // BullMQ job ID для связи с очередью
   analysisId String
   analysis   VideoAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  // Связь с конфигурацией (если создано через Simple/Expert mode)
+  configId   String?
+  config     GenerationConfig? @relation(fields: [configId], references: [id], onDelete: SetNull)
 
   provider String // "kling" (video-to-video)
   status   String @default("pending") // pending, processing, completed, failed
@@ -106,6 +111,7 @@ model VideoGeneration {
   @@index([status])
   @@index([klingTaskId])
   @@index([remixSource])
+  @@index([configId])
 }
 
 // Scene in a video (detected by PySceneDetect)

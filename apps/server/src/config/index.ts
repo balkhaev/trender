@@ -95,6 +95,19 @@ export const video = {
 } as const;
 
 // =============================================================================
+// Timeouts
+// =============================================================================
+
+export const timeouts = {
+  /** Max time to wait for Gemini file processing (ms) */
+  geminiProcessing: 5 * 60 * 1000, // 5 минут
+  /** Max time for Gemini API call (ms) */
+  geminiApi: 3 * 60 * 1000, // 3 минуты
+  /** Max time for OpenAI API call (ms) */
+  openaiApi: 2 * 60 * 1000, // 2 минуты
+} as const;
+
+// =============================================================================
 // Server
 // =============================================================================
 
@@ -120,6 +133,7 @@ export const config = {
   paths,
   video,
   server,
+  timeouts,
 } as const;
 
 export default config;

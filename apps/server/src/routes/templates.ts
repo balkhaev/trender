@@ -2,11 +2,13 @@ import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import prisma from "@trender/db";
 import {
   ErrorResponseSchema,
+  FeedQuerySchema,
+  FeedResponseSchema,
   ListQuerySchema,
   NotFoundResponseSchema,
   TemplateSchema,
   UnauthorizedResponseSchema,
-} from "../schemas/openapi";
+} from "../schemas";
 import { isKlingConfigured } from "../services/kling";
 import { videoGenJobQueue } from "../services/queues";
 import { getReelVideoPublicUrl } from "../services/s3";
@@ -14,6 +16,29 @@ import { getReelVideoPublicUrl } from "../services/s3";
 // Schemas moved to centralized location
 
 // --- Routes ---
+
+// Feed route for infinite scroll
+const feedRoute = createRoute({
+  method: "get",
+  path: "/feed",
+  summary: "Get templates feed",
+  tags: ["Templates"],
+  description:
+    "Returns templates feed with cursor-based pagination for infinite scroll.",
+  request: {
+    query: FeedQuerySchema,
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: FeedResponseSchema,
+        },
+      },
+      description: "Templates feed",
+    },
+  },
+});
 
 const listTemplatesRoute = createRoute({
   method: "get",
@@ -277,6 +302,113 @@ const getTagsRoute = createRoute({
 });
 
 export const templatesRouter = new OpenAPIHono();
+
+// Feed handler
+templatesRouter.openapi(feedRoute, async (c) => {
+  const { limit, cursor, category, tags, sort } = c.req.valid("query");
+
+  // Build where clause
+  const where: Record<string, unknown> = {
+    isPublished: true,
+  };
+
+  if (category) {
+    where.category = category;
+  }
+
+  if (tags) {
+    const tagList = tags.split(",").map((t) => t.trim());
+    where.tags = { hasSome: tagList };
+  }
+
+  // Cursor-based pagination
+  if (cursor) {
+    where.id = { lt: cursor };
+  }
+
+  // Build orderBy based on sort
+  let orderBy: Record<string, string>[];
+  switch (sort) {
+    case "popular":
+      orderBy = [{ generationCount: "desc" }, { id: "desc" }];
+      break;
+    case "trending":
+      orderBy = [
+        { generationCount: "desc" },
+        { createdAt: "desc" },
+        { id: "desc" },
+      ];
+      break;
+    case "recent":
+    default:
+      orderBy = [{ createdAt: "desc" }, { id: "desc" }];
+  }
+
+  const templates = await prisma.template.findMany({
+    where,
+    take: limit + 1, // Fetch one extra to check hasMore
+    orderBy,
+    include: {
+      reel: {
+        select: {
+          id: true,
+          author: true,
+          likeCount: true,
+          thumbnailUrl: true,
+          s3Key: true,
+          localPath: true,
+          hashtag: true,
+          source: true,
+        },
+      },
+      analysis: {
+        select: {
+          id: true,
+          elements: true,
+        },
+      },
+    },
+  });
+
+  const hasMore = templates.length > limit;
+  const items = hasMore ? templates.slice(0, limit) : templates;
+  const nextCursor = hasMore ? (items[items.length - 1]?.id ?? null) : null;
+
+  return c.json({
+    items: items.map((t) => {
+      const elements =
+        (t.analysis?.elements as Array<{
+          id: string;
+          type: "character" | "object" | "background";
+          label: string;
+        }>) ?? [];
+
+      return {
+        id: t.id,
+        title: t.title,
+        tags: t.tags,
+        category: t.category,
+        thumbnailUrl: t.reel?.thumbnailUrl ?? "",
+        previewVideoUrl: t.reel
+          ? (buildReelVideoUrl(t.reel) ?? undefined)
+          : undefined,
+        generationCount: t.generationCount,
+        reel: {
+          id: t.reel?.id ?? "",
+          author: t.reel?.author ?? null,
+          likeCount: t.reel?.likeCount ?? null,
+        },
+        elements: elements.slice(0, 5).map((el) => ({
+          id: el.id,
+          type: el.type,
+          label: el.label,
+        })),
+      };
+    }),
+    nextCursor,
+    hasMore,
+  });
+});
 
 templatesRouter.openapi(listTemplatesRoute, async (c) => {
   const query = c.req.valid("query");

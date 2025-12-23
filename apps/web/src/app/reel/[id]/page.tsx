@@ -16,6 +16,7 @@ import {
   MessageCircle,
   Play,
   RefreshCw,
+  RotateCcw,
   Sparkles,
   Trash2,
   XCircle,
@@ -57,6 +58,7 @@ import {
   useDownloadReel,
   useGenerateVideo,
   useReelDebug,
+  useResetReelStatus,
   useResizeReel,
 } from "@/lib/hooks/use-templates";
 import { hasVideo, refreshReelMetadata } from "@/lib/reels-api";
@@ -175,6 +177,8 @@ export default function ReelDetailPage() {
   const { mutateAsync: deleteReelAsync, isPending: isDeleting } =
     useDeleteReel();
   const { mutate: resizeReel, isPending: isResizing } = useResizeReel();
+  const { mutate: resetReelStatus, isPending: isResetting } =
+    useResetReelStatus();
   const { mutate: refreshMetadata, isPending: isRefreshingMetadata } =
     useMutation({
       mutationFn: () => refreshReelMetadata(reelId),
@@ -184,6 +188,16 @@ export default function ReelDetailPage() {
       },
       onError: (err: Error) => toast.error(err.message),
     });
+
+  const handleResetStatus = useCallback(() => {
+    resetReelStatus(reelId, {
+      onSuccess: () => {
+        toast.success("Статус сброшен до 'Скачано'");
+        refetch();
+      },
+      onError: (err: Error) => toast.error(err.message),
+    });
+  }, [reelId, resetReelStatus, refetch]);
 
   const handleResize = useCallback(() => {
     resizeReel(reelId, {
@@ -466,6 +480,25 @@ export default function ReelDetailPage() {
                     <VideoTrimButton
                       videoUrl={data.videoUrl || data.reel.videoUrl || ""}
                     />
+                  )}
+
+                {/* Reset Status Button - show when stuck in analyzing or failed */}
+                {hasVideo(data.reel) &&
+                  (data.reel.status === "analyzing" ||
+                    data.reel.status === "failed") && (
+                    <Button
+                      className="transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                      disabled={isResetting}
+                      onClick={handleResetStatus}
+                      variant="outline"
+                    >
+                      {isResetting ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <RotateCcw className="mr-2 h-4 w-4" />
+                      )}
+                      Сбросить статус
+                    </Button>
                   )}
               </CardContent>
             </Card>

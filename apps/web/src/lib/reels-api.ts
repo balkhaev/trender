@@ -241,6 +241,7 @@ export type SavedReelsParams = {
   offset?: number;
   minLikes?: number;
   status?: ReelStatus;
+  search?: string;
 };
 
 export type ReelStats = {
@@ -284,6 +285,9 @@ export async function getSavedReels(
   }
   if (params.status) {
     searchParams.set("status", params.status);
+  }
+  if (params.search) {
+    searchParams.set("search", params.search);
   }
 
   const response = await fetch(
@@ -511,6 +515,25 @@ export async function batchAnalyzeReels(
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.error || "Failed to start batch analysis");
+  }
+
+  return response.json();
+}
+
+/**
+ * Reset reel status to downloaded (for reprocessing)
+ */
+export async function resetReelStatus(
+  id: string
+): Promise<{ success: boolean; reel: SavedReel; message: string }> {
+  const response = await fetch(`${API_URL}/api/reels/${id}/reset-status`, {
+    method: "POST",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to reset reel status");
   }
 
   return response.json();

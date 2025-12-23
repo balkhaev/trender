@@ -1,9 +1,26 @@
 import OpenAI from "openai";
-import { ai } from "../config";
+import { ai, timeouts } from "../config";
 import { aiLogger } from "./ai-logger";
 import type { DetectableElement, RemixOption } from "./gemini";
 
 const openaiConfig = ai.openai;
+
+/**
+ * Обёртка для Promise с таймаутом
+ */
+async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  operation: string
+): Promise<T> {
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(
+      () => reject(new Error(`${operation} timeout: превышено ${ms / 1000}с`)),
+      ms
+    )
+  );
+  return Promise.race([promise, timeout]);
+}
 
 // Элемент без вариантов (для передачи в ChatGPT)
 export type ElementWithoutOptions = Omit<DetectableElement, "remixOptions">;
@@ -118,21 +135,25 @@ export class OpenAIService {
     });
 
     try {
-      const response = await this.client.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content: ENHANCE_PROMPT_FOR_KLING,
-          },
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
-        temperature: 0.7,
-        max_tokens: 500,
-      });
+      const response = await withTimeout(
+        this.client.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [
+            {
+              role: "system",
+              content: ENHANCE_PROMPT_FOR_KLING,
+            },
+            {
+              role: "user",
+              content: prompt,
+            },
+          ],
+          temperature: 0.7,
+          max_tokens: 500,
+        }),
+        timeouts.openaiApi,
+        "OpenAI enhancePromptForKling"
+      );
 
       const enhancedPrompt = response.choices[0]?.message?.content?.trim();
       if (!enhancedPrompt) {
@@ -189,21 +210,25 @@ export class OpenAIService {
         2
       );
 
-      const response = await this.client.chat.completions.create({
-        model: "gpt-4o",
-        messages: [
-          {
-            role: "system",
-            content: NORMAL_ABSURD_REMIX_PROMPT,
-          },
-          {
-            role: "user",
-            content: `Generate remix options for these elements:\n\n${inputJson}`,
-          },
-        ],
-        temperature: 0.8,
-        max_tokens: 4000,
-      });
+      const response = await withTimeout(
+        this.client.chat.completions.create({
+          model: "gpt-4o",
+          messages: [
+            {
+              role: "system",
+              content: NORMAL_ABSURD_REMIX_PROMPT,
+            },
+            {
+              role: "user",
+              content: `Generate remix options for these elements:\n\n${inputJson}`,
+            },
+          ],
+          temperature: 0.8,
+          max_tokens: 4000,
+        }),
+        timeouts.openaiApi,
+        "OpenAI generateEnchantingOptions"
+      );
 
       const content = response.choices[0]?.message?.content;
       if (!content) {

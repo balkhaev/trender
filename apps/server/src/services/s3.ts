@@ -29,7 +29,12 @@ function getS3Client(): S3Client {
 }
 
 // File types for S3 storage
-export type S3FileType = "reels" | "generations" | "thumbnails" | "references";
+export type S3FileType =
+  | "reels"
+  | "generations"
+  | "thumbnails"
+  | "references"
+  | "media";
 
 /**
  * Generate S3 key for a file
@@ -49,7 +54,8 @@ export function getS3Key(
   return `${type}/${id}.${extension}`;
 }
 
-const S3_KEY_REGEX = /^(reels|generations|thumbnails|references)\/(.+)\.\w+$/;
+const S3_KEY_REGEX =
+  /^(reels|generations|thumbnails|references|media)\/(.+)\.\w+$/;
 
 /**
  * Parse S3 key to extract type and id

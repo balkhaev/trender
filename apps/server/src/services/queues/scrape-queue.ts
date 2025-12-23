@@ -23,7 +23,11 @@ export const scrapeQueue = new Queue<ScrapeJobData, ScrapeJobResult>(
     defaultJobOptions: {
       removeOnComplete: 100,
       removeOnFail: 50,
-      attempts: 1,
+      attempts: 3,
+      backoff: {
+        type: "exponential",
+        delay: 10_000, // 10s, 20s, 40s
+      },
     },
   }
 );

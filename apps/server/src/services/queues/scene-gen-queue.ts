@@ -58,8 +58,16 @@ async function trimVideo(
   startTime: number,
   endTime: number
 ): Promise<Buffer> {
-  // Download source video first
-  const sourceResponse = await fetch(sourceVideoUrl);
+  const { fetchWithTimeout, FETCH_TIMEOUTS } = await import(
+    "../../utils/fetch-with-timeout"
+  );
+
+  // Download source video first (2 min timeout)
+  const sourceResponse = await fetchWithTimeout(
+    sourceVideoUrl,
+    {},
+    FETCH_TIMEOUTS.download
+  );
   if (!sourceResponse.ok) {
     throw new Error(
       `Failed to download source video: ${sourceResponse.status}`
@@ -77,10 +85,15 @@ async function trimVideo(
   formData.append("start_time", startTime.toString());
   formData.append("end_time", endTime.toString());
 
-  const response = await fetch(`${VIDEO_FRAMES_SERVICE_URL}/trim`, {
-    method: "POST",
-    body: formData,
-  });
+  // 3 min timeout for trim operation
+  const response = await fetchWithTimeout(
+    `${VIDEO_FRAMES_SERVICE_URL}/trim`,
+    {
+      method: "POST",
+      body: formData,
+    },
+    FETCH_TIMEOUTS.trim
+  );
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -329,20 +342,28 @@ export const compositeGenQueue = new Queue<
   defaultJobOptions: {
     removeOnComplete: 20,
     removeOnFail: 30,
-    attempts: 1, // No retry for concat
+    attempts: 2,
+    backoff: {
+      type: "fixed",
+      delay: 30_000, // 30s между попытками
+    },
   },
 });
 
 registerQueue(compositeGenQueue);
 
 /**
- * Wait for a scene generation to complete
+ * Wait for a scene generation to complete with heartbeat
+ * Обновляет lastActivityAt composite generation каждые 30 секунд
  */
 async function waitForSceneGeneration(
   generationId: string,
+  compositeGenerationId: string,
   timeoutMs: number = 30 * 60 * 1000 // 30 minutes
 ): Promise<string> {
   const startTime = Date.now();
+  const heartbeatIntervalMs = 30_000; // 30 секунд
+  let lastHeartbeat = Date.now();
 
   while (Date.now() - startTime < timeoutMs) {
     const generation = await prisma.sceneGeneration.findUnique({
@@ -361,6 +382,19 @@ async function waitForSceneGeneration(
       throw new Error(`Scene generation failed: ${generation.error}`);
     }
 
+    // Heartbeat: обновляем lastActivityAt и progressMessage
+    if (Date.now() - lastHeartbeat >= heartbeatIntervalMs) {
+      const elapsedSec = Math.floor((Date.now() - startTime) / 1000);
+      await prisma.compositeGeneration.update({
+        where: { id: compositeGenerationId },
+        data: {
+          lastActivityAt: new Date(),
+          progressMessage: `Ожидание сцены ${generationId.slice(0, 8)}... (${elapsedSec}s)`,
+        },
+      });
+      lastHeartbeat = Date.now();
+    }
+
     // Wait 5 seconds before next check
     await new Promise((resolve) => setTimeout(resolve, 5000));
   }
@@ -372,11 +406,15 @@ async function waitForSceneGeneration(
  * Concatenate videos using video-frames service
  */
 async function concatenateVideos(videoUrls: string[]): Promise<Buffer> {
-  // Download all videos
+  const { fetchWithTimeout, FETCH_TIMEOUTS } = await import(
+    "../../utils/fetch-with-timeout"
+  );
+
+  // Download all videos (2 min timeout per video)
   const videoBuffers: ArrayBuffer[] = [];
 
   for (const url of videoUrls) {
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url, {}, FETCH_TIMEOUTS.download);
     if (!response.ok) {
       throw new Error(`Failed to download video: ${url}`);
     }
@@ -393,10 +431,15 @@ async function concatenateVideos(videoUrls: string[]): Promise<Buffer> {
     );
   }
 
-  const response = await fetch(`${VIDEO_FRAMES_SERVICE_URL}/concat`, {
-    method: "POST",
-    body: formData,
-  });
+  // 5 min timeout for concat operation
+  const response = await fetchWithTimeout(
+    `${VIDEO_FRAMES_SERVICE_URL}/concat`,
+    {
+      method: "POST",
+      body: formData,
+    },
+    FETCH_TIMEOUTS.concat
+  );
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -455,9 +498,10 @@ export const compositeGenWorker = new Worker<
 
           videoSegments.push({ url: trimmedUrl, order: config.sceneIndex });
         } else if (config.generationId) {
-          // Wait for scene generation
+          // Wait for scene generation with heartbeat
           const generatedUrl = await waitForSceneGeneration(
-            config.generationId
+            config.generationId,
+            compositeGenerationId
           );
           videoSegments.push({ url: generatedUrl, order: config.sceneIndex });
         }

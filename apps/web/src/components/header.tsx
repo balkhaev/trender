@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { KlingBalance } from "./kling-balance";
 import { QueueStatus } from "./queue-status";
 
 export default function Header() {
@@ -32,6 +33,7 @@ export default function Header() {
           </nav>
         </div>
         <div className="flex items-center gap-3">
+          <KlingBalance />
           <QueueStatus />
         </div>
       </div>

@@ -5,8 +5,25 @@ import {
   HarmCategory,
 } from "@google/generative-ai";
 import { FileState, GoogleAIFileManager } from "@google/generative-ai/server";
-import { ai } from "../config";
+import { ai, timeouts } from "../config";
 import { aiLogger } from "./ai-logger";
+
+/**
+ * Обёртка для Promise с таймаутом
+ */
+async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  operation: string
+): Promise<T> {
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(
+      () => reject(new Error(`${operation} timeout: превышено ${ms / 1000}с`)),
+      ms
+    )
+  );
+  return Promise.race([promise, timeout]);
+}
 
 const geminiConfig = ai.gemini;
 
@@ -410,6 +427,7 @@ export class GeminiService {
 
       let file = uploadResult.file;
       let pollCount = 0;
+      const startTime = Date.now();
 
       await onProgress?.(
         "uploading",
@@ -418,6 +436,13 @@ export class GeminiService {
       );
 
       while (file.state === FileState.PROCESSING) {
+        // Проверка таймаута обработки файла
+        if (Date.now() - startTime > timeouts.geminiProcessing) {
+          throw new Error(
+            `Gemini processing timeout: файл обрабатывается дольше ${timeouts.geminiProcessing / 1000 / 60} минут`
+          );
+        }
+
         pollCount += 1;
         // Прогресс от 10% до 50% во время обработки файла
         const percent = Math.min(10 + pollCount * 3, 50);
@@ -466,15 +491,19 @@ export class GeminiService {
         safetySettings: SAFETY_SETTINGS,
       });
 
-      const result = await model.generateContent([
-        {
-          fileData: {
-            mimeType: "video/mp4",
-            fileUri,
+      const result = await withTimeout(
+        model.generateContent([
+          {
+            fileData: {
+              mimeType: "video/mp4",
+              fileUri,
+            },
           },
-        },
-        { text: ANALYSIS_PROMPT },
-      ]);
+          { text: ANALYSIS_PROMPT },
+        ]),
+        timeouts.geminiApi,
+        "Gemini analyzeVideo"
+      );
 
       await onProgress?.("analyzing", 80, "Обработка результатов анализа...");
 
@@ -562,10 +591,14 @@ export class GeminiService {
         },
       }));
 
-      const result = await model.generateContent([
-        ...imageParts,
-        { text: FRAMES_ANALYSIS_PROMPT },
-      ]);
+      const result = await withTimeout(
+        model.generateContent([
+          ...imageParts,
+          { text: FRAMES_ANALYSIS_PROMPT },
+        ]),
+        timeouts.geminiApi,
+        "Gemini analyzeFrames"
+      );
 
       await onProgress?.("analyzing", 80, "Обработка результатов анализа...");
 
@@ -684,15 +717,19 @@ export class GeminiService {
         safetySettings: SAFETY_SETTINGS,
       });
 
-      const result = await model.generateContent([
-        {
-          fileData: {
-            mimeType: "video/mp4",
-            fileUri,
+      const result = await withTimeout(
+        model.generateContent([
+          {
+            fileData: {
+              mimeType: "video/mp4",
+              fileUri,
+            },
           },
-        },
-        { text: ELEMENTS_ONLY_PROMPT },
-      ]);
+          { text: ELEMENTS_ONLY_PROMPT },
+        ]),
+        timeouts.geminiApi,
+        "Gemini analyzeVideoElementsOnly"
+      );
 
       await onProgress?.("analyzing", 80, "Обработка результатов анализа...");
 
@@ -797,10 +834,14 @@ export class GeminiService {
         },
       }));
 
-      const result = await model.generateContent([
-        ...imageParts,
-        { text: FRAMES_ELEMENTS_ONLY_PROMPT },
-      ]);
+      const result = await withTimeout(
+        model.generateContent([
+          ...imageParts,
+          { text: FRAMES_ELEMENTS_ONLY_PROMPT },
+        ]),
+        timeouts.geminiApi,
+        "Gemini analyzeFramesElementsOnly"
+      );
 
       await onProgress?.("analyzing", 80, "Обработка результатов анализа...");
 

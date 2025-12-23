@@ -95,12 +95,14 @@ class ReelPipeline {
 
   /**
    * Анализировать видео рила
-   * Делегирует работу VideoAnalysisService
+   * Использует scene-based анализ (PySceneDetect + Gemini по сценам)
    */
   async analyzeReel(reelId: string): Promise<VideoAnalysis> {
-    const { videoAnalysisService } = await import("./analysis");
+    const { sceneAnalysisService } = await import(
+      "./analysis/scene-analysis.service"
+    );
 
-    return videoAnalysisService.analyzeReel(reelId, {
+    return sceneAnalysisService.analyzeReelWithScenes(reelId, {
       updateStatus: this.updateStatus.bind(this),
       updateProgress: this.updateProgress.bind(this),
     });

@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   analyzeReel,
   analyzeReelByFrames,
-  analyzeReelEnchanting,
   downloadReel,
   generateFromTemplate,
   generateVideo,
@@ -257,12 +256,12 @@ export function useAnalyzeReelByFrames() {
   });
 }
 
-// Analyze Reel Enchanting (Gemini + ChatGPT)
+// Analyze Reel (uses enchanting by default: Gemini + ChatGPT)
 export function useAnalyzeReelEnchanting() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (reelId: string) => analyzeReelEnchanting(reelId),
+    mutationFn: (reelId: string) => analyzeReel(reelId),
     onSuccess: (_, reelId) => {
       queryClient.invalidateQueries({ queryKey: ["reel-debug", reelId] });
       queryClient.invalidateQueries({ queryKey: ["saved-reels"] });
@@ -293,6 +292,20 @@ export function useBatchResizeReels() {
     mutationFn: (reelIds: string[]) =>
       import("../templates-api").then((m) => m.batchResizeReels(reelIds)),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["saved-reels"] });
+    },
+  });
+}
+
+// Reset Reel Status (to downloaded)
+export function useResetReelStatus() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (reelId: string) =>
+      import("../reels-api").then((m) => m.resetReelStatus(reelId)),
+    onSuccess: (_, reelId) => {
+      queryClient.invalidateQueries({ queryKey: ["reel-debug", reelId] });
       queryClient.invalidateQueries({ queryKey: ["saved-reels"] });
     },
   });

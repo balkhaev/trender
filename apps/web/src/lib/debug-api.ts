@@ -353,3 +353,147 @@ export function getStatusColor(status: string): string {
       return "text-gray-500";
   }
 }
+
+// ============================================================================
+// Job Health Types & API
+// ============================================================================
+
+export type StalledJob = {
+  id: string;
+  queueName: string;
+  jobId: string;
+  entityId: string | null;
+  entityType: string | null;
+  substage: string | null;
+  lastActivityAt: string;
+  startedAt: string;
+  minutesSinceActivity: number;
+};
+
+export type RecentFailure = {
+  id: string;
+  queueName: string;
+  jobId: string;
+  entityId: string | null;
+  completedAt: string | null;
+  alertMessage: string | null;
+};
+
+export type HealthStatus = {
+  status: "healthy" | "unhealthy";
+  timestamp: string;
+  problems: {
+    stalled: StalledJob[];
+    slow: StalledJob[];
+    recentFailures: RecentFailure[];
+  };
+  summary: {
+    stalledCount: number;
+    slowCount: number;
+    recentFailuresCount: number;
+  };
+};
+
+export type ActiveJob = {
+  id: string;
+  queueName: string;
+  jobId: string;
+  entityId: string | null;
+  entityType: string | null;
+  substage: string | null;
+  startedAt: string;
+  lastActivityAt: string;
+  durationMs: number;
+};
+
+export type QueueHealthStats = Record<
+  string,
+  {
+    active: number;
+    stalled: number;
+    completedLast24h: number;
+    failedLast24h: number;
+    avgDurationMs: number | null;
+  }
+>;
+
+/**
+ * Get job health status - проблемные jobs
+ */
+export async function getHealthStatus(
+  stalledMinutes?: number
+): Promise<HealthStatus> {
+  const params = new URLSearchParams();
+  if (stalledMinutes) {
+    params.set("stalledMinutes", stalledMinutes.toString());
+  }
+
+  const response = await fetch(`${API_URL}/api/debug/health?${params}`, {
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to get health status");
+  }
+
+  return response.json();
+}
+
+/**
+ * Get stalled jobs only
+ */
+export async function getStalledJobs(thresholdMinutes?: number): Promise<{
+  count: number;
+  thresholdMinutes: number;
+  jobs: StalledJob[];
+}> {
+  const params = new URLSearchParams();
+  if (thresholdMinutes) {
+    params.set("threshold", thresholdMinutes.toString());
+  }
+
+  const response = await fetch(`${API_URL}/api/debug/stalled-jobs?${params}`, {
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to get stalled jobs");
+  }
+
+  return response.json();
+}
+
+/**
+ * Get active jobs
+ */
+export async function getActiveJobs(): Promise<{
+  count: number;
+  jobs: ActiveJob[];
+}> {
+  const response = await fetch(`${API_URL}/api/debug/active-jobs`, {
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to get active jobs");
+  }
+
+  return response.json();
+}
+
+/**
+ * Get queue health stats
+ */
+export async function getQueueHealthStats(): Promise<{
+  stats: QueueHealthStats;
+}> {
+  const response = await fetch(`${API_URL}/api/debug/queue-health`, {
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to get queue health stats");
+  }
+
+  return response.json();
+}

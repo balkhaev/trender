@@ -1,35 +1,18 @@
+/**
+ * Internal API Schemas
+ *
+ * Внутренние схемы для админ/дебаг роутеров:
+ * - Reels management
+ * - Video analysis (detailed)
+ * - Templates (admin)
+ * - Pipeline/Queue management
+ * - Files
+ */
+
 import { z } from "@hono/zod-openapi";
+import { DetectableElementSchema } from "./public";
 
-// --- Error Schemas ---
-
-export const ErrorResponseSchema = z
-  .object({
-    error: z.string().openapi({
-      description: "Error message details",
-      example: "Invalid input provided",
-    }),
-  })
-  .openapi("ErrorResponse");
-
-export const NotFoundResponseSchema = z
-  .object({
-    error: z.string().openapi({
-      description: "Resource not found message",
-      example: "Reel not found",
-    }),
-  })
-  .openapi("NotFoundResponse");
-
-export const UnauthorizedResponseSchema = z
-  .object({
-    error: z.string().openapi({
-      description: "Authentication failure message",
-      example: "Invalid or expired token",
-    }),
-  })
-  .openapi("UnauthorizedResponse");
-
-// --- Query Schemas ---
+// ===== QUERY SCHEMAS =====
 
 export const ListQuerySchema = z.object({
   limit: z.coerce
@@ -59,7 +42,68 @@ export const ListQuerySchema = z.object({
     .openapi({ param: { name: "published", in: "query" } }),
 });
 
-// --- Common Schemas ---
+export const VideoAnalysisListQuerySchema = z.object({
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(50)
+    .openapi({ param: { name: "limit", in: "query" } }),
+  offset: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .default(0)
+    .openapi({ param: { name: "offset", in: "query" } }),
+});
+
+export const ReelListQuerySchema = z.object({
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(500)
+    .default(100)
+    .openapi({ param: { name: "limit", in: "query" } }),
+  offset: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .default(0)
+    .openapi({ param: { name: "offset", in: "query" } }),
+  minLikes: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .default(0)
+    .optional()
+    .openapi({ param: { name: "minLikes", in: "query" } }),
+  hashtag: z
+    .string()
+    .optional()
+    .openapi({ param: { name: "hashtag", in: "query" } }),
+  status: z
+    .enum([
+      "scraped",
+      "downloading",
+      "downloaded",
+      "analyzing",
+      "analyzed",
+      "failed",
+    ])
+    .optional()
+    .openapi({ param: { name: "status", in: "query" } }),
+  search: z
+    .string()
+    .optional()
+    .openapi({
+      param: { name: "search", in: "query" },
+      description: "Search in caption, author, hashtag",
+    }),
+});
+
+// ===== ANALYSIS DETAIL SCHEMAS =====
 
 export const VideoSceneSchema = z
   .object({
@@ -191,37 +235,6 @@ export const TextOverlaySchema = z
   })
   .openapi("TextOverlay");
 
-export const RemixOptionSchema = z
-  .object({
-    id: z.string().openapi({ description: "Variant ID", example: "variant-1" }),
-    label: z
-      .string()
-      .openapi({ description: "Display label", example: "Cyberpunk Robot" }),
-    icon: z.string().openapi({ description: "Emoji icon", example: "🤖" }),
-    prompt: z.string().openapi({
-      description: "Transformation prompt",
-      example: "Transform the subject into...",
-    }),
-  })
-  .openapi("RemixOption");
-
-export const DetectableElementSchema = z
-  .object({
-    id: z.string().openapi({ description: "Element ID", example: "char-1" }),
-    type: z
-      .enum(["character", "object", "background"])
-      .openapi({ description: "Element type" }),
-    label: z
-      .string()
-      .openapi({ description: "Element label", example: "Ginger Cat" }),
-    description: z.string().openapi({
-      description: "Description",
-      example: "A fluffy ginger cat...",
-    }),
-    remixOptions: z.array(RemixOptionSchema),
-  })
-  .openapi("DetectableElement");
-
 export const RemixSuggestionSchema = z
   .object({
     id: z.string().openapi({
@@ -297,10 +310,47 @@ export const AnalysisSchema = z
     tags: z
       .array(z.string())
       .openapi({ example: ["vlog", "coffee", "morning"] }),
-    suggestions: z.array(RemixSuggestionSchema).optional(), // Deprecated
+    suggestions: z.array(RemixSuggestionSchema).optional(),
     elements: z.array(DetectableElementSchema).optional(),
   })
   .openapi("VideoAnalysis");
+
+export const AnalysisPreviewSchema = z
+  .object({
+    id: z.string().openapi({ description: "Analysis ID" }),
+    subject: z.string().openapi({ description: "Main subject" }),
+    action: z.string().openapi({ description: "Main action" }),
+    style: z.string().openapi({ description: "Visual style" }),
+    klingPrompt: z
+      .string()
+      .default("")
+      .openapi({ description: "Kling prompt" }),
+    veo3Prompt: z.string().default("").openapi({ description: "Veo3 prompt" }),
+  })
+  .openapi("AnalysisPreview");
+
+export const VideoAnalysisDbSchema = z
+  .object({
+    id: z.string(),
+    sourceType: z.string(),
+    sourceId: z.string().nullable(),
+    fileName: z.string().nullable(),
+    duration: z.number().nullable(),
+    aspectRatio: z.string().nullable(),
+    elements: z.any(),
+    tags: z.array(z.string()).nullable(),
+    analysisType: z.string().nullable(),
+    subject: z.string().nullable(),
+    action: z.string().nullable(),
+    style: z.string().nullable(),
+    klingPrompt: z.string().nullable(),
+    veo3Prompt: z.string().nullable(),
+    createdAt: z.string(),
+    generations: z.array(z.any()).optional(),
+  })
+  .openapi("VideoAnalysisDb");
+
+// ===== TEMPLATE SCHEMAS =====
 
 export const ReelPreviewSchema = z
   .object({
@@ -318,20 +368,6 @@ export const ReelPreviewSchema = z
     source: z.string().openapi({ description: "Source platform/type" }),
   })
   .openapi("ReelPreview");
-
-export const AnalysisPreviewSchema = z
-  .object({
-    id: z.string().openapi({ description: "Analysis ID" }),
-    subject: z.string().openapi({ description: "Main subject" }),
-    action: z.string().openapi({ description: "Main action" }),
-    style: z.string().openapi({ description: "Visual style" }),
-    klingPrompt: z
-      .string()
-      .default("")
-      .openapi({ description: "Kling prompt" }),
-    veo3Prompt: z.string().default("").openapi({ description: "Veo3 prompt" }),
-  })
-  .openapi("AnalysisPreview");
 
 export const TemplateSchema = z
   .object({
@@ -368,7 +404,7 @@ export const TemplateSchema = z
   })
   .openapi("Template");
 
-// --- Video API Schemas ---
+// ===== VIDEO GENERATION SCHEMAS =====
 
 export const VideoGenerationSchema = z
   .object({
@@ -478,72 +514,6 @@ export const AnalyzeReelRequestSchema = z
   })
   .openapi("AnalyzeReelRequest");
 
-export const VideoAnalysisListQuerySchema = z.object({
-  limit: z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(100)
-    .default(50)
-    .openapi({ param: { name: "limit", in: "query" } }),
-  offset: z.coerce
-    .number()
-    .int()
-    .min(0)
-    .default(0)
-    .openapi({ param: { name: "offset", in: "query" } }),
-});
-
-export const VideoGenerationListQuerySchema = z.object({
-  limit: z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(100)
-    .default(50)
-    .openapi({ param: { name: "limit", in: "query" } }),
-  offset: z.coerce
-    .number()
-    .int()
-    .min(0)
-    .default(0)
-    .openapi({ param: { name: "offset", in: "query" } }),
-  status: z
-    .string()
-    .optional()
-    .openapi({ param: { name: "status", in: "query" } }),
-});
-
-export const VideoAnalysisDbSchema = z
-  .object({
-    id: z.string(),
-    sourceType: z.string(),
-    sourceId: z.string().nullable(),
-    fileName: z.string().nullable(),
-    duration: z.number().nullable(),
-    aspectRatio: z.string().nullable(),
-    elements: z.any(),
-    tags: z.array(z.string()).nullable(),
-    analysisType: z.string().nullable(),
-    subject: z.string().nullable(),
-    action: z.string().nullable(),
-    style: z.string().nullable(),
-    klingPrompt: z.string().nullable(),
-    veo3Prompt: z.string().nullable(),
-    createdAt: z.string(),
-    generations: z.array(VideoGenerationSchema).optional(),
-  })
-  .openapi("VideoAnalysisDb");
-
-export const UploadReferenceResponseSchema = z
-  .object({
-    success: z.boolean(),
-    url: z.string().openapi({ description: "Public URL for the image" }),
-    s3Key: z.string().openapi({ description: "S3 storage key" }),
-    imageId: z.string().openapi({ description: "Unique image identifier" }),
-  })
-  .openapi("UploadReferenceResponse");
-
 export const AnalyzeVideoRequestSchema = z.object({
   video: z.any().openapi({
     type: "string",
@@ -586,10 +556,108 @@ export const UpdateAnalysisRequestSchema = z
   })
   .openapi("UpdateAnalysisRequest");
 
+export const UploadReferenceResponseSchema = z
+  .object({
+    success: z.boolean(),
+    url: z.string().openapi({ description: "Public URL for the image" }),
+    s3Key: z.string().openapi({ description: "S3 storage key" }),
+    imageId: z.string().openapi({ description: "Unique image identifier" }),
+  })
+  .openapi("UploadReferenceResponse");
+
 export const UploadImageRequestSchema = z.object({
   file: z.any().openapi({
     type: "string",
     format: "binary",
     description: "Image file to upload (max 20MB)",
   }),
+});
+
+// ===== REELS MANAGEMENT SCHEMAS =====
+
+export const AddReelRequestSchema = z
+  .object({
+    url: z.string().url().openapi({
+      description: "Instagram Reel URL",
+      example: "https://www.instagram.com/reel/ABC123_XYZ/",
+    }),
+  })
+  .openapi("AddReelRequest");
+
+export const AddReelResponseSchema = z
+  .object({
+    success: z.boolean(),
+    reel: ReelPreviewSchema,
+    message: z.string(),
+    isNew: z.boolean(),
+  })
+  .openapi("AddReelResponse");
+
+export const ReelStatsResponseSchema = z
+  .object({
+    total: z.number(),
+    byStatus: z.object({
+      scraped: z.number(),
+      downloading: z.number(),
+      downloaded: z.number(),
+      analyzing: z.number(),
+      analyzed: z.number(),
+      failed: z.number(),
+    }),
+    templates: z.number(),
+    activeGenerations: z.number(),
+  })
+  .openapi("ReelStatsResponse");
+
+export const ProcessReelRequestSchema = z
+  .object({
+    useFrames: z.boolean().optional().default(false),
+    force: z.boolean().optional().default(false),
+  })
+  .openapi("ProcessReelRequest");
+
+export const ProcessReelResponseSchema = z
+  .object({
+    success: z.boolean(),
+    message: z.string(),
+    jobId: z.string(),
+    reelId: z.string(),
+  })
+  .openapi("ProcessReelResponse");
+
+export const RefreshMetadataResponseSchema = z
+  .object({
+    success: z.boolean(),
+    message: z.string(),
+    reel: ReelPreviewSchema,
+  })
+  .openapi("RefreshMetadataResponse");
+
+export const ResizeReelResponseSchema = z
+  .object({
+    success: z.boolean(),
+    message: z.string(),
+    resized: z.boolean(),
+    originalWidth: z.number().optional(),
+    newWidth: z.number().optional(),
+  })
+  .openapi("ResizeReelResponse");
+
+export const BatchRefreshDurationRequestSchema = z
+  .object({
+    reelIds: z.array(z.string()).openapi({
+      description: "List of reel IDs to refresh",
+    }),
+  })
+  .openapi("BatchRefreshDurationRequest");
+
+// ===== FILES SCHEMAS =====
+
+export const FileStreamSchema = z
+  .any()
+  .openapi({ type: "string", format: "binary" });
+
+export const FileMetadataResponseSchema = z.object({
+  contentType: z.string(),
+  contentLength: z.string(),
 });

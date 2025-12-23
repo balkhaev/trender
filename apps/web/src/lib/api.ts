@@ -164,40 +164,6 @@ export async function analyzeVideo(file: File): Promise<AnalyzeVideoResult> {
   };
 }
 
-// Enchanting mode: Gemini анализирует элементы, ChatGPT генерирует варианты
-export type AnalyzeEnchantingResult = AnalyzeVideoResult & {
-  mode: "enchanting";
-};
-
-export async function analyzeVideoEnchanting(
-  file: File
-): Promise<AnalyzeEnchantingResult> {
-  const formData = new FormData();
-  formData.append("video", file);
-
-  const response = await fetch(`${API_URL}/api/video/analyze-enchanting`, {
-    method: "POST",
-    body: formData,
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    const errorData = (await response.json()) as AnalyzeVideoError;
-    throw new Error(
-      errorData.error || "Failed to analyze video with enchanting mode"
-    );
-  }
-
-  const data = (await response.json()) as AnalyzeVideoResponse & {
-    mode: string;
-  };
-  return {
-    analysis: data.analysis,
-    analysisId: data.analysisId,
-    mode: "enchanting",
-  };
-}
-
 export type AnalyzeDownloadedRequest = {
   hashtag: string;
   filename: string;

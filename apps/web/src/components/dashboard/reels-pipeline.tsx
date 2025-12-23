@@ -1,6 +1,13 @@
 "use client";
 
-import { ArrowDown, ArrowUp, Loader2, Play, Trash2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Loader2,
+  Play,
+  Search,
+  Trash2,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -25,6 +32,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -108,10 +116,20 @@ export function ReelsPipeline() {
   );
   const [analyzeAllDownloaded, setAnalyzeAllDownloaded] = useState(true);
   const [sortConfig, setSortConfig] = useState<SortConfig>(loadSortConfig);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const { data: stats } = useReelStats();
-  const { data, isLoading } = useAllReels(200);
+  const { data, isLoading } = useAllReels(200, debouncedSearch || undefined);
   const deleteAllMutation = useDeleteAllReels();
   const batchAnalyzeMutation = useBatchAnalyze();
+
+  // Debounce поиска
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // Сохраняем сортировку в localStorage при изменении
   useEffect(() => {
@@ -234,6 +252,17 @@ export function ReelsPipeline() {
               </TabsTrigger>
             ))}
           </TabsList>
+
+          {/* Поиск */}
+          <div className="relative shrink-0">
+            <Search className="-translate-y-1/2 absolute top-1/2 left-2 h-4 w-4 text-muted-foreground" />
+            <Input
+              className="h-8 w-48 pl-8"
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Поиск..."
+              value={searchQuery}
+            />
+          </div>
 
           {/* Сортировка */}
           <div className="flex shrink-0 items-center gap-1">

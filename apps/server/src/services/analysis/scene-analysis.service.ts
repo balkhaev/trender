@@ -220,11 +220,21 @@ async function mergeElementsWithOptions(
     remixOptions: [],
   }));
 
+  console.log(
+    `[mergeElementsWithOptions] OpenAI configured: ${isOpenAIConfigured()}, elements count: ${elements.length}`
+  );
+
   if (isOpenAIConfigured() && elements.length > 0) {
     try {
+      console.log(
+        "[mergeElementsWithOptions] Calling OpenAI generateEnchantingOptions..."
+      );
       const openaiService = getOpenAIService();
       const enchantingResults =
         await openaiService.generateEnchantingOptions(elements);
+      console.log(
+        `[mergeElementsWithOptions] OpenAI returned ${enchantingResults.length} results`
+      );
 
       elementsWithOptions = elements.map((element) => {
         const enchantingResult = enchantingResults.find(
@@ -412,10 +422,23 @@ export async function analyzeReelWithScenes(
       // Analyze scene with Gemini
       const sceneAnalysis = await analyzeScene(sceneFrames, i, async () => {});
 
+      console.log(
+        `[SceneAnalysis] Scene ${i}: Gemini found ${sceneAnalysis.elements.length} elements`
+      );
+
       // Generate remix options with ChatGPT
       const elementsWithOptions = await mergeElementsWithOptions(
         sceneAnalysis.elements,
         reelId
+      );
+
+      console.log(
+        `[SceneAnalysis] Scene ${i}: After ChatGPT, elements with options:`,
+        elementsWithOptions.map((e) => ({
+          id: e.id,
+          label: e.label,
+          remixOptionsCount: e.remixOptions?.length || 0,
+        }))
       );
 
       // Collect tags

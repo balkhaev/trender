@@ -18,7 +18,7 @@ import {
   VideoAnalysisListQuerySchema,
   VideoGenerationListQuerySchema,
   VideoGenerationSchema,
-} from "../schemas/openapi";
+} from "../schemas";
 import { getGeminiService, type VideoAnalysis } from "../services/gemini";
 import { getDownloadsPath } from "../services/instagram/downloader";
 import { isKlingConfigured } from "../services/kling";
@@ -108,42 +108,6 @@ const analyzeRoute = createRoute({
     500: {
       content: { "application/json": { schema: ErrorResponseSchema } },
       description: "Server error during analysis",
-    },
-  },
-});
-
-const analyzeEnchantingRoute = createRoute({
-  method: "post",
-  path: "/analyze-enchanting",
-  summary: "Analyze video with enchanting mode",
-  description:
-    "Analyze video using Gemini for elements detection and ChatGPT for remix options generation",
-  tags: ["Video"],
-  request: {
-    body: {
-      content: {
-        "multipart/form-data": {
-          schema: AnalyzeVideoRequestSchema,
-        },
-      },
-    },
-  },
-  responses: {
-    200: {
-      content: {
-        "application/json": {
-          schema: AnalyzedVideoResponseSchema,
-        },
-      },
-      description: "Video analyzed with enchanting mode",
-    },
-    400: {
-      content: { "application/json": { schema: ErrorResponseSchema } },
-      description: "Bad request - invalid file type or size",
-    },
-    500: {
-      content: { "application/json": { schema: ErrorResponseSchema } },
-      description: "Server error or OpenAI not configured",
     },
   },
 });
@@ -603,116 +567,70 @@ video.openapi(analyzeRoute, async (c) => {
       );
     }
 
+    // Default to enchanting mode if OpenAI is configured
     const geminiService = getGeminiService();
     const buffer = Buffer.from(await file.arrayBuffer());
-    const analysis = await geminiService.processVideo(
-      buffer,
-      file.type,
-      file.name
-    );
+    let analysis: VideoAnalysis;
+    let mode = "standard";
 
-    const saved = await saveAnalysis(analysis, "upload", undefined, file.name);
+    // Check if we can do enchanting analysis (needs OpenAI)
+    if (isOpenAIConfigured()) {
+      try {
+        console.log("Starting enchanting analysis (Gemini + OpenAI)...");
+        const openaiService = getOpenAIService();
 
-    return c.json({
-      success: true,
-      analysis,
-      analysisId: saved.id,
-    });
-  } catch (error) {
-    console.error("Video analysis error:", error);
+        const elementsAnalysis = await geminiService.processVideoElementsOnly(
+          buffer,
+          file.type,
+          file.name
+        );
 
-    const message =
-      error instanceof Error ? error.message : "Unknown error occurred";
-    return c.json({ error: message }, 500);
-  }
-});
+        const enchantingResults = await openaiService.generateEnchantingOptions(
+          elementsAnalysis.elements
+        );
 
-video.openapi(analyzeEnchantingRoute, async (c) => {
-  try {
-    const formData = await c.req.formData();
-    const file = formData.get("video");
+        // Merge results
+        const elementsWithOptions = elementsAnalysis.elements.map((element) => {
+          const enchantingResult = enchantingResults.find(
+            (r) => r.id === element.id
+          );
+          return {
+            id: element.id,
+            type: element.type,
+            label: element.label,
+            description: element.description,
+            remixOptions: enchantingResult?.remixOptions || [],
+          };
+        });
 
-    if (!(file && file instanceof File)) {
-      return c.json({ error: "Video file is required" }, 400);
+        analysis = {
+          duration: elementsAnalysis.duration,
+          aspectRatio: elementsAnalysis.aspectRatio,
+          tags: elementsAnalysis.tags,
+          elements: elementsWithOptions,
+        };
+        mode = "enchanting";
+      } catch (err) {
+        console.error(
+          "Enchanting analysis failed, falling back to standard:",
+          err
+        );
+        // Fallback to standard full analysis
+        analysis = await geminiService.processVideo(
+          buffer,
+          file.type,
+          file.name
+        );
+      }
+    } else {
+      console.log("OpenAI not configured, using standard Gemini analysis");
+      analysis = await geminiService.processVideo(buffer, file.type, file.name);
     }
-
-    if (!ALLOWED_MIME_TYPES.includes(file.type)) {
-      return c.json(
-        {
-          error: `Invalid file type. Allowed: ${ALLOWED_MIME_TYPES.join(", ")}`,
-        },
-        400
-      );
-    }
-
-    if (file.size > MAX_FILE_SIZE) {
-      return c.json(
-        {
-          error: `File too large. Maximum size: ${MAX_FILE_SIZE / 1024 / 1024}MB`,
-        },
-        400
-      );
-    }
-
-    if (!isOpenAIConfigured()) {
-      return c.json(
-        {
-          error:
-            "OpenAI API is not configured. Set OPENAI_API_KEY environment variable.",
-        },
-        500
-      );
-    }
-
-    const geminiService = getGeminiService();
-    const openaiService = getOpenAIService();
-    const buffer = Buffer.from(await file.arrayBuffer());
-
-    const elementsAnalysis = await geminiService.processVideoElementsOnly(
-      buffer,
-      file.type,
-      file.name
-    );
-
-    const enchantingResults = await openaiService.generateEnchantingOptions(
-      elementsAnalysis.elements
-    );
-
-    const elementsWithOptions: Array<{
-      id: string;
-      type: "character" | "object" | "background";
-      label: string;
-      description: string;
-      remixOptions: Array<{
-        id: string;
-        label: string;
-        icon: string;
-        prompt: string;
-      }>;
-    }> = elementsAnalysis.elements.map((element) => {
-      const enchantingResult = enchantingResults.find(
-        (r) => r.id === element.id
-      );
-      return {
-        id: element.id,
-        type: element.type,
-        label: element.label,
-        description: element.description,
-        remixOptions: enchantingResult?.remixOptions || [],
-      };
-    });
-
-    const analysis: VideoAnalysis = {
-      duration: elementsAnalysis.duration,
-      aspectRatio: elementsAnalysis.aspectRatio,
-      tags: elementsAnalysis.tags,
-      elements: elementsWithOptions,
-    };
 
     const saved = await prisma.videoAnalysis.create({
       data: {
         sourceType: "upload",
-        analysisType: "enchanting",
+        analysisType: mode,
         fileName: file.name,
         duration: analysis.duration,
         aspectRatio: analysis.aspectRatio,
@@ -725,10 +643,10 @@ video.openapi(analyzeEnchantingRoute, async (c) => {
       success: true,
       analysis,
       analysisId: saved.id,
-      mode: "enchanting" as const,
+      mode,
     });
   } catch (error) {
-    console.error("Enchanting analysis error:", error);
+    console.error("Video analysis error:", error);
 
     const message =
       error instanceof Error ? error.message : "Unknown error occurred";

@@ -1,9 +1,17 @@
 "use client";
 
-import { Pause, Play, Scissors, SkipBack, SkipForward } from "lucide-react";
+import {
+  Eye,
+  Pause,
+  Play,
+  Scissors,
+  SkipBack,
+  SkipForward,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
+import { VideoTimeline } from "./video-timeline";
+import { TimeInput } from "./video-timeline/time-input";
 
 type VideoTrimEditorProps = {
   videoFile?: File;
@@ -31,6 +39,7 @@ export function VideoTrimEditor({
   const [isPlaying, setIsPlaying] = useState(false);
   const [trimRange, setTrimRange] = useState<[number, number]>([0, 0]);
   const [videoError, setVideoError] = useState<string | null>(null);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
 
   const blobUrl = useMemo(
     () => (videoFile ? URL.createObjectURL(videoFile) : null),
@@ -64,14 +73,23 @@ export function VideoTrimEditor({
 
   const handleTimeUpdate = useCallback(() => {
     if (videoRef.current) {
-      setCurrentTime(videoRef.current.currentTime);
+      const time = videoRef.current.currentTime;
+      setCurrentTime(time);
+
+      // Stop at end of selection in preview mode
+      if (isPreviewMode && time >= trimRange[1]) {
+        videoRef.current.pause();
+        videoRef.current.currentTime = trimRange[1];
+        setIsPreviewMode(false);
+      }
     }
-  }, []);
+  }, [isPreviewMode, trimRange]);
 
   const handlePlayPause = useCallback(() => {
     if (videoRef.current) {
       if (isPlaying) {
         videoRef.current.pause();
+        setIsPreviewMode(false);
       } else {
         videoRef.current.play().catch(() => {
           setVideoError("Не удалось воспроизвести видео");
@@ -95,9 +113,52 @@ export function VideoTrimEditor({
     }
   }, [trimRange]);
 
-  const handleRangeChange = useCallback((values: number[]) => {
-    setTrimRange([values[0], values[1]]);
+  const handleSeek = useCallback((time: number) => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = time;
+      setCurrentTime(time);
+    }
   }, []);
+
+  const handleRangeChange = useCallback((range: [number, number]) => {
+    setTrimRange(range);
+    setIsPreviewMode(false);
+  }, []);
+
+  const handleStartTimeChange = useCallback(
+    (time: number) => {
+      const newStart = Math.min(time, trimRange[1] - 0.1);
+      setTrimRange([Math.max(0, newStart), trimRange[1]]);
+      setIsPreviewMode(false);
+    },
+    [trimRange]
+  );
+
+  const handleEndTimeChange = useCallback(
+    (time: number) => {
+      const newEnd = Math.max(time, trimRange[0] + 0.1);
+      setTrimRange([trimRange[0], Math.min(duration, newEnd)]);
+      setIsPreviewMode(false);
+    },
+    [trimRange, duration]
+  );
+
+  const handlePreview = useCallback(() => {
+    if (!videoRef.current) return;
+
+    if (isPreviewMode) {
+      videoRef.current.pause();
+      setIsPreviewMode(false);
+    } else {
+      videoRef.current.currentTime = trimRange[0];
+      setCurrentTime(trimRange[0]);
+      videoRef.current.play().catch(() => {
+        setVideoError("Не удалось воспроизвести видео");
+      });
+      setIsPreviewMode(true);
+      setIsPlaying(true);
+    }
+  }, [isPreviewMode, trimRange]);
 
   const handleTrim = useCallback(() => {
     onTrim(trimRange[0], trimRange[1]);
@@ -116,7 +177,10 @@ export function VideoTrimEditor({
         ) : (
           <video
             className="h-full w-full object-contain"
-            onEnded={() => setIsPlaying(false)}
+            onEnded={() => {
+              setIsPlaying(false);
+              setIsPreviewMode(false);
+            }}
             onError={handleVideoError}
             onLoadedMetadata={handleLoadedMetadata}
             onPause={() => setIsPlaying(false)}
@@ -128,73 +192,101 @@ export function VideoTrimEditor({
         )}
       </div>
 
-      {/* Playback Controls */}
-      <div className="flex items-center justify-center gap-2">
-        <Button
-          disabled={!!videoError}
-          onClick={handleSeekToStart}
-          size="icon"
-          title="К началу выделения"
-          variant="outline"
-        >
-          <SkipBack className="h-4 w-4" />
-        </Button>
-        <Button
-          disabled={!!videoError}
-          onClick={handlePlayPause}
-          size="icon"
-          title={isPlaying ? "Пауза" : "Воспроизвести"}
-          variant="outline"
-        >
-          {isPlaying ? (
-            <Pause className="h-4 w-4" />
-          ) : (
-            <Play className="h-4 w-4" />
-          )}
-        </Button>
-        <Button
-          disabled={!!videoError}
-          onClick={handleSeekToEnd}
-          size="icon"
-          title="К концу выделения"
-          variant="outline"
-        >
-          <SkipForward className="h-4 w-4" />
-        </Button>
+      {/* Timeline with thumbnails */}
+      {duration > 0 && (
+        <VideoTimeline
+          currentTime={currentTime}
+          duration={duration}
+          onRangeChange={handleRangeChange}
+          onSeek={handleSeek}
+          trimRange={trimRange}
+          videoUrl={videoUrl}
+        />
+      )}
+
+      {/* Playback Controls + Time Inputs */}
+      <div className="flex items-center justify-between">
+        <div className="flex gap-1">
+          <Button
+            disabled={!!videoError}
+            onClick={handleSeekToStart}
+            size="icon"
+            title="К началу выделения"
+            variant="outline"
+          >
+            <SkipBack className="h-4 w-4" />
+          </Button>
+          <Button
+            disabled={!!videoError}
+            onClick={handlePlayPause}
+            size="icon"
+            title={isPlaying ? "Пауза" : "Воспроизвести"}
+            variant="outline"
+          >
+            {isPlaying ? (
+              <Pause className="h-4 w-4" />
+            ) : (
+              <Play className="h-4 w-4" />
+            )}
+          </Button>
+          <Button
+            disabled={!!videoError}
+            onClick={handleSeekToEnd}
+            size="icon"
+            title="К концу выделения"
+            variant="outline"
+          >
+            <SkipForward className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {duration > 0 && (
+          <div className="flex gap-4">
+            <TimeInput
+              label="Начало"
+              max={trimRange[1] - 0.1}
+              min={0}
+              onChange={handleStartTimeChange}
+              value={trimRange[0]}
+            />
+            <TimeInput
+              label="Конец"
+              max={duration}
+              min={trimRange[0] + 0.1}
+              onChange={handleEndTimeChange}
+              value={trimRange[1]}
+            />
+          </div>
+        )}
       </div>
 
-      {/* Time Range Slider */}
+      {/* Duration info */}
       {duration > 0 && (
-        <div className="space-y-2">
-          <div className="flex justify-between text-muted-foreground text-sm">
-            <span>Начало: {formatTime(trimRange[0])}</span>
-            <span>Текущее: {formatTime(currentTime)}</span>
-            <span>Конец: {formatTime(trimRange[1])}</span>
-          </div>
-
-          <Slider
-            max={duration}
-            min={0}
-            onValueChange={handleRangeChange}
-            step={0.1}
-            value={trimRange}
-          />
-
-          <div className="text-center text-muted-foreground text-sm">
-            Длительность: {formatTime(trimDuration)} (из {formatTime(duration)})
-          </div>
+        <div className="text-center text-muted-foreground text-sm">
+          Выбрано: {formatTime(trimDuration)} из {formatTime(duration)}
         </div>
       )}
 
-      {/* Trim Button */}
-      <Button
-        className="w-full"
-        disabled={isLoading || trimDuration <= 0 || !!videoError}
-        onClick={handleTrim}
-      >
-        <Scissors className="mr-2 h-4 w-4" />
-        {isLoading ? "Обрезаем..." : "Обрезать видео"}
-      </Button>
+      {/* Action Buttons */}
+      <div className="flex gap-2">
+        <Button
+          className="flex-1"
+          disabled={!!videoError || trimDuration <= 0}
+          onClick={handlePreview}
+          variant="outline"
+        >
+          <Eye className="mr-2 h-4 w-4" />
+          {isPreviewMode ? "Остановить" : "Предпросмотр"}
+        </Button>
+        <Button
+          className="flex-1"
+          disabled={isLoading || trimDuration <= 0 || !!videoError}
+          onClick={handleTrim}
+        >
+          <Scissors className="mr-2 h-4 w-4" />
+          {isLoading ? "Обрезаем..." : "Обрезать"}
+        </Button>
+      </div>
     </div>
   );
 }

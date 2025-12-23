@@ -2,10 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import prisma from "@trender/db";
-import {
-  ErrorResponseSchema,
-  NotFoundResponseSchema,
-} from "../schemas/openapi";
+import { ErrorResponseSchema, NotFoundResponseSchema } from "../schemas";
 import { getDownloadsPath } from "../services/instagram/downloader";
 import { pipelineJobQueue } from "../services/queues";
 import { getS3Key, isS3Configured, s3Service } from "../services/s3";

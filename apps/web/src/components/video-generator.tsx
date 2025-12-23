@@ -4,6 +4,7 @@ import { Clock, Film, Loader2, Settings2, Sparkles, Wand2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { type ElementSelection, RemixEditor } from "@/components/remix-editor";
+import { SceneElements } from "@/components/scene-elements";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -83,8 +84,9 @@ export function VideoGenerator({
 
     for (const analysis of analyses) {
       const type = analysis.analysisType || "standard";
-      // Map enchanting to standard for display purposes
-      const displayType = type === "enchanting" ? "standard" : type;
+      // Map enchanting and scenes to standard for display purposes
+      const displayType =
+        type === "enchanting" || type === "scenes" ? "standard" : type;
       if (
         (displayType === "standard" || displayType === "frames") &&
         !byType[displayType]
@@ -168,11 +170,18 @@ export function VideoGenerator({
     }
   }, [currentAnalysis]);
 
+  // Collect all elements (from scenes if available, otherwise from analysis)
+  const allElements = useMemo(() => {
+    if (currentAnalysis?.hasScenes && currentAnalysis?.videoScenes) {
+      return currentAnalysis.videoScenes.flatMap((s) => s.elements || []);
+    }
+    return currentAnalysis?.elements || [];
+  }, [currentAnalysis]);
+
   // Generated prompt
   const { prompt: generatedPrompt, elementRefs } = useMemo(
-    () =>
-      buildElementPrompt(currentAnalysis?.elements || [], elementSelections),
-    [currentAnalysis?.elements, elementSelections]
+    () => buildElementPrompt(allElements, elementSelections),
+    [allElements, elementSelections]
   );
 
   const canGenerateNow = useMemo(
@@ -301,17 +310,28 @@ export function VideoGenerator({
                     {/* Analysis Results */}
                     <AnalysisResults analysis={analysis} />
 
-                    {/* Remix Editor */}
+                    {/* Remix Editor or Scene Elements */}
                     <div className="space-y-2">
                       <Label className="font-medium text-sm">
                         Элементы для замены
                       </Label>
-                      <RemixEditor
-                        analysis={analysis}
-                        disabled={isGenerating}
-                        key={analysis.id}
-                        onSelectionsChange={handleSelectionsChange}
-                      />
+                      {analysis.hasScenes &&
+                      analysis.videoScenes &&
+                      analysis.videoScenes.length > 0 ? (
+                        <SceneElements
+                          disabled={isGenerating}
+                          key={analysis.id}
+                          onSelectionsChange={handleSelectionsChange}
+                          scenes={analysis.videoScenes}
+                        />
+                      ) : (
+                        <RemixEditor
+                          analysis={analysis}
+                          disabled={isGenerating}
+                          key={analysis.id}
+                          onSelectionsChange={handleSelectionsChange}
+                        />
+                      )}
                     </div>
 
                     {/* Prompt Preview */}
@@ -426,6 +446,15 @@ export function VideoGenerator({
 }
 
 function AnalysisResults({ analysis }: { analysis: TemplateAnalysis }) {
+  // Count total elements (from scenes if available)
+  const totalElements =
+    analysis.hasScenes && analysis.videoScenes
+      ? analysis.videoScenes.reduce(
+          (sum, s) => sum + (s.elements?.length || 0),
+          0
+        )
+      : analysis.elements?.length || 0;
+
   return (
     <div className="space-y-3 rounded-lg border bg-surface-1/50 p-3">
       {/* Tags */}
@@ -443,8 +472,11 @@ function AnalysisResults({ analysis }: { analysis: TemplateAnalysis }) {
           </Badge>
         )}
         <Badge variant="outline">{analysis.aspectRatio}</Badge>
-        {analysis.elements && (
-          <Badge variant="outline">{analysis.elements.length} элементов</Badge>
+        {analysis.hasScenes && analysis.scenesCount && (
+          <Badge variant="outline">{analysis.scenesCount} сцен</Badge>
+        )}
+        {totalElements > 0 && (
+          <Badge variant="outline">{totalElements} элементов</Badge>
         )}
       </div>
 

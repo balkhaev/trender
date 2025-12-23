@@ -1,16 +1,21 @@
-/**
- * Reels API routes
- * Modular structure:
- * - auth.ts - Authentication endpoints
- * - scrape.ts - Scraping endpoints and worker handler
- */
-import { existsSync } from "node:fs";
-import { readdir, stat, unlink } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import prisma from "@trender/db";
-import { Hono } from "hono";
-import { z } from "zod";
 import { services } from "../../config";
+import {
+  AddReelRequestSchema,
+  AddReelResponseSchema,
+  BatchRefreshDurationRequestSchema,
+  ErrorResponseSchema,
+  NotFoundResponseSchema,
+  ProcessReelRequestSchema,
+  ProcessReelResponseSchema,
+  ReelListQuerySchema,
+  ReelStatsResponseSchema,
+  RefreshMetadataResponseSchema,
+  ResizeReelResponseSchema,
+} from "../../schemas";
 import { getDownloadsPath } from "../../services/instagram/downloader";
 import { parseReelUrl } from "../../services/instagram/reel-url";
 import { pipelineLogger } from "../../services/pipeline-logger";
@@ -32,7 +37,7 @@ declare const Bun: {
 const MP4_EXTENSION_REGEX = /\.mp4$/;
 
 // Create main router
-const reelsRouter = new Hono();
+const reelsRouter = new OpenAPIHono();
 
 // Mount sub-routers
 reelsRouter.route("/auth", authRouter);
@@ -42,11 +47,538 @@ reelsRouter.route("/scrape", scrapeRouter);
 initScrapeWorkerHandler();
 
 // ============================================
-// JOBS ENDPOINTS
+// ROUTE DEFINITIONS
 // ============================================
 
-// Get all scrape jobs
-reelsRouter.get("/jobs", async (c) => {
+const listScrapeJobsRoute = createRoute({
+  method: "get",
+  path: "/jobs",
+  summary: "Get all scrape jobs",
+  tags: ["Reels"],
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: z.array(z.any()),
+        },
+      },
+      description: "List of scrape jobs",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Server error",
+    },
+  },
+});
+
+const listDownloadsRoute = createRoute({
+  method: "get",
+  path: "/downloads",
+  summary: "List downloaded files",
+  tags: ["Reels"],
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: z.record(z.string(), z.array(z.string())),
+        },
+      },
+      description: "Map of hashtags to filenames",
+    },
+  },
+});
+
+const downloadFileRoute = createRoute({
+  method: "get",
+  path: "/downloads/{hashtag}/{filename}",
+  summary: "Download specific file",
+  tags: ["Reels"],
+  request: {
+    params: z.object({
+      hashtag: z.string().openapi({ param: { name: "hashtag", in: "path" } }),
+      filename: z.string().openapi({ param: { name: "filename", in: "path" } }),
+    }),
+  },
+  responses: {
+    200: {
+      description: "Video stream",
+      content: {
+        "video/mp4": {
+          schema: z.string().openapi({ format: "binary" }),
+        },
+      },
+    },
+    400: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Invalid file type",
+    },
+    404: {
+      content: { "application/json": { schema: NotFoundResponseSchema } },
+      description: "File not found",
+    },
+  },
+});
+
+const listSavedReelsRoute = createRoute({
+  method: "get",
+  path: "/saved",
+  summary: "Get saved reels",
+  tags: ["Reels"],
+  request: {
+    query: ReelListQuerySchema,
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            reels: z.array(z.any()),
+            total: z.number(),
+            limit: z.number(),
+            offset: z.number(),
+          }),
+        },
+      },
+      description: "List of saved reels",
+    },
+  },
+});
+
+const getSavedReelRoute = createRoute({
+  method: "get",
+  path: "/saved/{id}",
+  summary: "Get saved reel by ID",
+  tags: ["Reels"],
+  request: {
+    params: z.object({
+      id: z.string().openapi({ param: { name: "id", in: "path" } }),
+    }),
+    query: z.object({
+      includeLogs: z
+        .enum(["true", "false"])
+        .optional()
+        .openapi({ param: { name: "includeLogs", in: "query" } }),
+    }),
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: z.any(),
+        },
+      },
+      description: "Reel details",
+    },
+    404: {
+      content: { "application/json": { schema: NotFoundResponseSchema } },
+      description: "Reel not found",
+    },
+  },
+});
+
+const addReelRoute = createRoute({
+  method: "post",
+  path: "/add",
+  summary: "Add reel by URL",
+  tags: ["Reels"],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: AddReelRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    201: {
+      content: {
+        "application/json": {
+          schema: AddReelResponseSchema,
+        },
+      },
+      description: "Reel added successfully",
+    },
+    200: {
+      content: {
+        "application/json": {
+          schema: AddReelResponseSchema,
+        },
+      },
+      description: "Reel already exists",
+    },
+    400: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Invalid URL",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Server error",
+    },
+  },
+});
+
+const getReelStatsRoute = createRoute({
+  method: "get",
+  path: "/stats",
+  summary: "Get dashboard stats",
+  tags: ["Reels"],
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: ReelStatsResponseSchema,
+        },
+      },
+      description: "Dashboard statistics",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Server error",
+    },
+  },
+});
+
+const getReelDebugRoute = createRoute({
+  method: "get",
+  path: "/{id}/debug",
+  summary: "Get full debug info for reel",
+  tags: ["Reels"],
+  request: {
+    params: z.object({
+      id: z.string().openapi({ param: { name: "id", in: "path" } }),
+    }),
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: z.any(),
+        },
+      },
+      description: "Debug info",
+    },
+    404: {
+      content: { "application/json": { schema: NotFoundResponseSchema } },
+      description: "Reel not found",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Server error",
+    },
+  },
+});
+
+const getReelLogsRoute = createRoute({
+  method: "get",
+  path: "/{id}/logs",
+  summary: "Get reel logs",
+  tags: ["Reels"],
+  request: {
+    params: z.object({
+      id: z.string().openapi({ param: { name: "id", in: "path" } }),
+    }),
+    query: z.object({
+      stage: z
+        .string()
+        .optional()
+        .openapi({ param: { name: "stage", in: "query" } }),
+      limit: z.coerce
+        .number()
+        .optional()
+        .openapi({ param: { name: "limit", in: "query" } }),
+    }),
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            logs: z.array(z.any()),
+          }),
+        },
+      },
+      description: "Reel logs",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Server error",
+    },
+  },
+});
+
+const processReelRoute = createRoute({
+  method: "post",
+  path: "/{id}/process",
+  summary: "Process reel (full flow)",
+  tags: ["Reels"],
+  request: {
+    params: z.object({
+      id: z.string().openapi({ param: { name: "id", in: "path" } }),
+    }),
+    body: {
+      content: {
+        "application/json": {
+          schema: ProcessReelRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: ProcessReelResponseSchema,
+        },
+      },
+      description: "Processing started",
+    },
+    404: {
+      content: { "application/json": { schema: NotFoundResponseSchema } },
+      description: "Reel not found",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Server error",
+    },
+  },
+});
+
+const downloadReelRoute = createRoute({
+  method: "post",
+  path: "/{id}/download",
+  summary: "Start reel download",
+  tags: ["Reels"],
+  request: {
+    params: z.object({
+      id: z.string().openapi({ param: { name: "id", in: "path" } }),
+    }),
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: z.any(),
+        },
+      },
+      description: "Download started",
+    },
+    404: {
+      content: { "application/json": { schema: NotFoundResponseSchema } },
+      description: "Reel not found",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Server error",
+    },
+  },
+});
+
+const refreshReelMetadataRoute = createRoute({
+  method: "post",
+  path: "/{id}/refresh-metadata",
+  summary: "Refresh reel metadata",
+  tags: ["Reels"],
+  request: {
+    params: z.object({
+      id: z.string().openapi({ param: { name: "id", in: "path" } }),
+    }),
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: RefreshMetadataResponseSchema,
+        },
+      },
+      description: "Metadata refreshed",
+    },
+    404: {
+      content: { "application/json": { schema: NotFoundResponseSchema } },
+      description: "Reel not found",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Server error",
+    },
+  },
+});
+
+const analyzeReelRoute = createRoute({
+  method: "post",
+  path: "/{id}/analyze",
+  summary: "Analyze reel",
+  tags: ["Reels"],
+  request: {
+    params: z.object({
+      id: z.string().openapi({ param: { name: "id", in: "path" } }),
+    }),
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: ProcessReelResponseSchema,
+        },
+      },
+      description: "Analysis started",
+    },
+    400: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Video not downloaded",
+    },
+    404: {
+      content: { "application/json": { schema: NotFoundResponseSchema } },
+      description: "Reel not found",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Server error",
+    },
+  },
+});
+
+const analyzeReelFramesRoute = createRoute({
+  method: "post",
+  path: "/{id}/analyze-frames",
+  summary: "Analyze reel frames",
+  tags: ["Reels"],
+  request: {
+    params: z.object({
+      id: z.string().openapi({ param: { name: "id", in: "path" } }),
+    }),
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: ProcessReelResponseSchema,
+        },
+      },
+      description: "Analysis started",
+    },
+    400: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Video not downloaded",
+    },
+    404: {
+      content: { "application/json": { schema: NotFoundResponseSchema } },
+      description: "Reel not found",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Server error",
+    },
+  },
+});
+
+const resizeReelRoute = createRoute({
+  method: "post",
+  path: "/{id}/resize",
+  summary: "Resize reel video",
+  tags: ["Reels"],
+  request: {
+    params: z.object({
+      id: z.string().openapi({ param: { name: "id", in: "path" } }),
+    }),
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: ResizeReelResponseSchema,
+        },
+      },
+      description: "Resize result",
+    },
+    404: {
+      content: { "application/json": { schema: NotFoundResponseSchema } },
+      description: "Reel not found",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Server error",
+    },
+  },
+});
+
+const batchRefreshDurationRoute = createRoute({
+  method: "post",
+  path: "/batch-refresh-duration",
+  summary: "Batch refresh durations",
+  tags: ["Reels"],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: BatchRefreshDurationRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: z.any(),
+        },
+      },
+      description: "Batch refresh result",
+    },
+    400: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Invalid request",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Server error",
+    },
+  },
+});
+
+const resetReelStatusRoute = createRoute({
+  method: "post",
+  path: "/{id}/reset-status",
+  summary: "Reset reel status to downloaded",
+  tags: ["Reels"],
+  request: {
+    params: z.object({
+      id: z.string().openapi({ param: { name: "id", in: "path" } }),
+    }),
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.boolean(),
+            message: z.string(),
+            reel: z.any(),
+          }),
+        },
+      },
+      description: "Status reset successfully",
+    },
+    400: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Video not downloaded",
+    },
+    404: {
+      content: { "application/json": { schema: NotFoundResponseSchema } },
+      description: "Reel not found",
+    },
+    500: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Server error",
+    },
+  },
+});
+
+// ============================================
+// ROUTE IMPLEMENTATIONS
+// ============================================
+
+reelsRouter.openapi(listScrapeJobsRoute, async (c) => {
   try {
     const { scrapeJobQueue } = await import("../../services/queues");
     const jobs = await scrapeJobQueue.getAllJobs();
@@ -60,7 +592,8 @@ reelsRouter.get("/jobs", async (c) => {
         progress: job.progress,
         createdAt: job.createdAt,
         updatedAt: job.updatedAt,
-      }))
+      })),
+      200
     );
   } catch (error) {
     console.error("Get jobs error:", error);
@@ -68,11 +601,7 @@ reelsRouter.get("/jobs", async (c) => {
   }
 });
 
-// ============================================
-// DOWNLOADS ENDPOINTS
-// ============================================
-
-reelsRouter.get("/downloads", async (c) => {
+reelsRouter.openapi(listDownloadsRoute, async (c) => {
   try {
     const downloadsPath = getDownloadsPath();
     const entries = await readdir(downloadsPath, { withFileTypes: true });
@@ -89,15 +618,14 @@ reelsRouter.get("/downloads", async (c) => {
       result[hashtag] = files.filter((f) => f.endsWith(".mp4"));
     }
 
-    return c.json(result);
+    return c.json(result, 200);
   } catch {
-    return c.json({});
+    return c.json({}, 200);
   }
 });
 
-reelsRouter.get("/downloads/:hashtag/:filename", async (c) => {
-  const hashtag = c.req.param("hashtag");
-  const filename = c.req.param("filename");
+reelsRouter.openapi(downloadFileRoute, async (c) => {
+  const { hashtag, filename } = c.req.valid("param");
 
   if (!filename.endsWith(".mp4")) {
     return c.json({ error: "Invalid file type" }, 400);
@@ -153,38 +681,27 @@ reelsRouter.get("/downloads/:hashtag/:filename", async (c) => {
   }
 });
 
-// ============================================
-// SAVED REELS ENDPOINTS
-// ============================================
+reelsRouter.openapi(listSavedReelsRoute, async (c) => {
+  const { limit, offset, minLikes, hashtag, status, search } =
+    c.req.valid("query");
 
-// Get saved reels from database with their analyses
-reelsRouter.get("/saved", async (c) => {
-  const limit = Number(c.req.query("limit")) || 100;
-  const offset = Number(c.req.query("offset")) || 0;
-  const minLikes = Number(c.req.query("minLikes")) || 0;
-  const hashtag = c.req.query("hashtag");
-  const status = c.req.query("status");
-
-  type WhereType = {
-    likeCount?: { gte: number };
-    hashtag?: string | null;
-    status?:
-      | "scraped"
-      | "downloading"
-      | "downloaded"
-      | "analyzing"
-      | "analyzed"
-      | "failed";
-  };
-  const where: WhereType = {};
-  if (minLikes > 0) {
+  // biome-ignore lint/suspicious/noExplicitAny: <explanation>
+  const where: any = {};
+  if (minLikes && minLikes > 0) {
     where.likeCount = { gte: minLikes };
   }
   if (hashtag) {
     where.hashtag = hashtag === "reels" ? null : hashtag;
   }
   if (status) {
-    where.status = status as WhereType["status"];
+    where.status = status;
+  }
+  if (search) {
+    where.OR = [
+      { caption: { contains: search, mode: "insensitive" } },
+      { author: { contains: search, mode: "insensitive" } },
+      { hashtag: { contains: search, mode: "insensitive" } },
+    ];
   }
 
   const [reels, total] = await Promise.all([
@@ -221,22 +738,25 @@ reelsRouter.get("/saved", async (c) => {
     analysis: analysisMap.get(reel.id) || null,
   }));
 
-  return c.json({
-    reels: reelsWithAnalysis,
-    total,
-    limit,
-    offset,
-  });
+  return c.json(
+    {
+      reels: reelsWithAnalysis,
+      total,
+      limit,
+      offset,
+    },
+    200
+  );
 });
 
-// Get reel by ID with optional recent logs
-reelsRouter.get("/saved/:id", async (c) => {
-  const id = c.req.param("id");
-  const includeLogs = c.req.query("includeLogs") === "true";
+reelsRouter.openapi(getSavedReelRoute, async (c) => {
+  const { id } = c.req.valid("param");
+  const { includeLogs } = c.req.valid("query");
+  const shouldIncludeLogs = includeLogs === "true";
 
   const reel = await prisma.reel.findUnique({
     where: { id },
-    include: includeLogs
+    include: shouldIncludeLogs
       ? {
           logs: {
             orderBy: { createdAt: "desc" },
@@ -251,37 +771,22 @@ reelsRouter.get("/saved/:id", async (c) => {
   }
 
   // Если включены логи, добавляем их отдельным полем для удобства
-  if (includeLogs && "logs" in reel) {
-    return c.json({
-      ...reel,
-      recentLogs: reel.logs,
-    });
+  if (shouldIncludeLogs && "logs" in reel) {
+    return c.json(
+      {
+        ...reel,
+        recentLogs: reel.logs,
+      },
+      200
+    );
   }
 
-  return c.json(reel);
+  return c.json(reel, 200);
 });
 
-// Add reel by direct URL
-const addReelSchema = z.object({
-  url: z.string().url(),
-});
-
-reelsRouter.post("/add", async (c) => {
+reelsRouter.openapi(addReelRoute, async (c) => {
   try {
-    const body = await c.req.json();
-    const parsed = addReelSchema.safeParse(body);
-
-    if (!parsed.success) {
-      return c.json(
-        {
-          error: "Invalid request",
-          details: parsed.error.flatten().fieldErrors,
-        },
-        400
-      );
-    }
-
-    const { url } = parsed.data;
+    const { url } = c.req.valid("json");
 
     // Parse shortcode from URL
     const shortcode = parseReelUrl(url);
@@ -344,8 +849,7 @@ reelsRouter.post("/add", async (c) => {
   }
 });
 
-// Stats endpoint for dashboard
-reelsRouter.get("/stats", async (c) => {
+reelsRouter.openapi(getReelStatsRoute, async (c) => {
   try {
     const [
       total,
@@ -371,33 +875,31 @@ reelsRouter.get("/stats", async (c) => {
       }),
     ]);
 
-    return c.json({
-      total,
-      byStatus: {
-        scraped,
-        downloading,
-        downloaded,
-        analyzing,
-        analyzed,
-        failed,
+    return c.json(
+      {
+        total,
+        byStatus: {
+          scraped,
+          downloading,
+          downloaded,
+          analyzing,
+          analyzed,
+          failed,
+        },
+        templates,
+        activeGenerations,
       },
-      templates,
-      activeGenerations,
-    });
+      200
+    );
   } catch (error) {
     console.error("Get stats error:", error);
     return c.json({ error: "Failed to get stats" }, 500);
   }
 });
 
-// ============================================
-// DEBUG ENDPOINTS
-// ============================================
-
-// Get reel with full debug information
-reelsRouter.get("/:id/debug", async (c) => {
+reelsRouter.openapi(getReelDebugRoute, async (c) => {
   try {
-    const id = c.req.param("id");
+    const { id } = c.req.valid("param");
 
     const reel = await reelPipeline.getReelWithDetails(id);
 
@@ -424,11 +926,14 @@ reelsRouter.get("/:id/debug", async (c) => {
       metadata: log.metadata,
     }));
 
-    // Получаем все анализы для этого рила
+    // Получаем все анализы для этого рила (включая сцены)
     const analyses = await prisma.videoAnalysis.findMany({
       where: {
-        sourceId: id,
         sourceType: "reel",
+        sourceId: id,
+      },
+      include: {
+        videoScenes: { orderBy: { index: "asc" } },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -436,11 +941,19 @@ reelsRouter.get("/:id/debug", async (c) => {
     // Получаем генерации для этого рила (полные данные)
     const generations = await prisma.videoGeneration.findMany({
       where: {
-        analysis: { sourceId: id, sourceType: "reel" },
+        analysis: { sourceId: id, sourceType: "reel" }, // Using relation filter hack, or just sourceType if schema supports
       },
       orderBy: { createdAt: "desc" },
     });
-    const generationIds = generations.map((g) => g.id);
+    // Fix: We need to filter generations by analysisId, where analysis.sourceId = id
+    // Optimization: we already fetched analyses.
+    const analysisIds = analyses.map((a) => a.id);
+    const relatedGenerations = await prisma.videoGeneration.findMany({
+      where: { analysisId: { in: analysisIds } },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const generationIds = relatedGenerations.map((g) => g.id);
 
     // Получаем AI логи (Kling, OpenAI, Gemini)
     const aiLogs = await prisma.aILog.findMany({
@@ -454,33 +967,34 @@ reelsRouter.get("/:id/debug", async (c) => {
     // Формируем videoUrl из s3Key или localPath
     const videoUrl = buildReelVideoUrl(reel);
 
-    return c.json({
-      reel: {
-        ...reel,
+    return c.json(
+      {
+        reel: {
+          ...reel,
+          videoUrl,
+        },
+        stageStats,
+        recentErrors,
+        timeline,
+        logs,
+        aiLogs,
+        // Дополнительные поля для фронтенда
+        analyses,
+        template: reel.template,
+        generations: relatedGenerations,
         videoUrl,
       },
-      stageStats,
-      recentErrors,
-      timeline,
-      logs,
-      aiLogs,
-      // Дополнительные поля для фронтенда
-      analyses,
-      template: reel.template,
-      generations,
-      videoUrl,
-    });
+      200
+    );
   } catch (error) {
     console.error("Debug endpoint error:", error);
     return c.json({ error: "Failed to get debug info" }, 500);
   }
 });
 
-// Get logs for specific reel
-reelsRouter.get("/:id/logs", async (c) => {
-  const id = c.req.param("id");
-  const stage = c.req.query("stage");
-  const limit = Number(c.req.query("limit")) || 100;
+reelsRouter.openapi(getReelLogsRoute, async (c) => {
+  const { id } = c.req.valid("param");
+  const { stage, limit } = c.req.valid("query");
 
   try {
     const logs = stage
@@ -488,90 +1002,90 @@ reelsRouter.get("/:id/logs", async (c) => {
           id,
           stage as "scrape" | "download" | "analyze" | "generate"
         )
-      : await pipelineLogger.getReelLogs(id, limit);
+      : await pipelineLogger.getReelLogs(id, limit || 100);
 
-    return c.json({ logs });
+    return c.json({ logs }, 200);
   } catch (error) {
     console.error("Get logs error:", error);
     return c.json({ error: "Failed to get logs" }, 500);
   }
 });
 
-// ============================================
-// PROCESSING ENDPOINTS
-// ============================================
-
-// Process reel (download -> analyze -> template)
-reelsRouter.post("/:id/process", async (c) => {
-  const reelId = c.req.param("id");
+reelsRouter.openapi(processReelRoute, async (c) => {
+  const { id } = c.req.valid("param");
 
   try {
-    const body = await c.req.json().catch(() => ({}));
-    const useFrames = body.useFrames === true;
-    const forceReprocess = body.force === true;
+    const { useFrames, force } = c.req.valid("json");
 
-    const reel = await prisma.reel.findUnique({ where: { id: reelId } });
+    const reel = await prisma.reel.findUnique({ where: { id } });
     if (!reel) {
       return c.json({ error: "Reel not found" }, 404);
     }
 
-    const jobId = await pipelineJobQueue.addProcessJob(reelId, {
+    const jobId = await pipelineJobQueue.addProcessJob(id, {
       useFrames,
-      forceReprocess,
+      forceReprocess: force,
     });
 
-    return c.json({
-      success: true,
-      message: "Processing started",
-      jobId,
-      reelId,
-    });
+    return c.json(
+      {
+        success: true,
+        message: "Processing started",
+        jobId,
+        reelId: id,
+      },
+      200
+    );
   } catch (error) {
     console.error("Process reel error:", error);
     return c.json({ error: "Failed to start processing" }, 500);
   }
 });
 
-// Download reel video
-reelsRouter.post("/:id/download", async (c) => {
-  const reelId = c.req.param("id");
+reelsRouter.openapi(downloadReelRoute, async (c) => {
+  const { id } = c.req.valid("param");
 
   try {
-    const reel = await prisma.reel.findUnique({ where: { id: reelId } });
+    const reel = await prisma.reel.findUnique({ where: { id } });
     if (!reel) {
       return c.json({ error: "Reel not found" }, 404);
     }
 
     // Check if already has video
     if (reel.s3Key || reel.localPath) {
-      return c.json({
-        success: true,
-        message: "Video already downloaded",
-        reelId,
-        hasVideo: true,
-      });
+      return c.json(
+        {
+          success: true,
+          message: "Video already downloaded",
+          reelId: id,
+          hasVideo: true,
+        },
+        200
+      );
     }
 
-    const jobId = await pipelineJobQueue.addDownloadJob(reelId);
+    const jobId = await pipelineJobQueue.addDownloadJob(id);
 
-    return c.json({
-      success: true,
-      message: "Download started",
-      jobId,
-      reelId,
-    });
+    return c.json(
+      {
+        success: true,
+        message: "Download started",
+        jobId,
+        reelId: id,
+      },
+      200
+    );
   } catch (error) {
     console.error("Download reel error:", error);
     return c.json({ error: "Failed to start download" }, 500);
   }
 });
 
-// Refresh metadata via scrapper
-reelsRouter.post("/:id/refresh-metadata", async (c) => {
-  const reelId = c.req.param("id");
+reelsRouter.openapi(refreshReelMetadataRoute, async (c) => {
+  const { id } = c.req.valid("param");
 
   try {
-    const reel = await prisma.reel.findUnique({ where: { id: reelId } });
+    const reel = await prisma.reel.findUnique({ where: { id } });
     if (!reel) {
       return c.json({ error: "Reel not found" }, 404);
     }
@@ -580,7 +1094,7 @@ reelsRouter.post("/:id/refresh-metadata", async (c) => {
     const response = await fetch(`${SCRAPPER_SERVICE_URL}/metadata`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ shortcode: reelId }),
+      body: JSON.stringify({ shortcode: id }),
     });
 
     if (!response.ok) {
@@ -606,7 +1120,7 @@ reelsRouter.post("/:id/refresh-metadata", async (c) => {
 
     // Update reel with new metadata
     const updated = await prisma.reel.update({
-      where: { id: reelId },
+      where: { id },
       data: {
         likeCount: metadata.likeCount ?? reel.likeCount,
         viewCount: metadata.viewCount ?? reel.viewCount,
@@ -619,23 +1133,25 @@ reelsRouter.post("/:id/refresh-metadata", async (c) => {
       },
     });
 
-    return c.json({
-      success: true,
-      message: "Metadata refreshed",
-      reel: updated,
-    });
+    return c.json(
+      {
+        success: true,
+        message: "Metadata refreshed",
+        reel: updated,
+      },
+      200
+    );
   } catch (error) {
     console.error("Refresh metadata error:", error);
     return c.json({ error: "Failed to refresh metadata" }, 500);
   }
 });
 
-// Analyze reel
-reelsRouter.post("/:id/analyze", async (c) => {
-  const reelId = c.req.param("id");
+reelsRouter.openapi(analyzeReelRoute, async (c) => {
+  const { id } = c.req.valid("param");
 
   try {
-    const reel = await prisma.reel.findUnique({ where: { id: reelId } });
+    const reel = await prisma.reel.findUnique({ where: { id } });
     if (!reel) {
       return c.json({ error: "Reel not found" }, 404);
     }
@@ -644,26 +1160,28 @@ reelsRouter.post("/:id/analyze", async (c) => {
       return c.json({ error: "Video not downloaded yet" }, 400);
     }
 
-    const jobId = await pipelineJobQueue.addAnalyzeJob(reelId);
+    const jobId = await pipelineJobQueue.addAnalyzeJob(id);
 
-    return c.json({
-      success: true,
-      message: "Analysis started",
-      jobId,
-      reelId,
-    });
+    return c.json(
+      {
+        success: true,
+        message: "Analysis started",
+        jobId,
+        reelId: id,
+      },
+      200
+    );
   } catch (error) {
     console.error("Analyze reel error:", error);
     return c.json({ error: "Failed to start analysis" }, 500);
   }
 });
 
-// Analyze reel by frames
-reelsRouter.post("/:id/analyze-frames", async (c) => {
-  const reelId = c.req.param("id");
+reelsRouter.openapi(analyzeReelFramesRoute, async (c) => {
+  const { id } = c.req.valid("param");
 
   try {
-    const reel = await prisma.reel.findUnique({ where: { id: reelId } });
+    const reel = await prisma.reel.findUnique({ where: { id } });
     if (!reel) {
       return c.json({ error: "Reel not found" }, 404);
     }
@@ -672,54 +1190,28 @@ reelsRouter.post("/:id/analyze-frames", async (c) => {
       return c.json({ error: "Video not downloaded yet" }, 400);
     }
 
-    const jobId = await pipelineJobQueue.addAnalyzeFramesJob(reelId);
+    const jobId = await pipelineJobQueue.addAnalyzeFramesJob(id);
 
-    return c.json({
-      success: true,
-      message: "Frame-by-frame analysis started",
-      jobId,
-      reelId,
-    });
+    return c.json(
+      {
+        success: true,
+        message: "Frame-by-frame analysis started",
+        jobId,
+        reelId: id,
+      },
+      200
+    );
   } catch (error) {
     console.error("Analyze frames error:", error);
     return c.json({ error: "Failed to start frame analysis" }, 500);
   }
 });
 
-// Analyze reel with enchanting mode
-reelsRouter.post("/:id/analyze-enchanting", async (c) => {
-  const reelId = c.req.param("id");
+reelsRouter.openapi(resizeReelRoute, async (c) => {
+  const { id } = c.req.valid("param");
 
   try {
-    const reel = await prisma.reel.findUnique({ where: { id: reelId } });
-    if (!reel) {
-      return c.json({ error: "Reel not found" }, 404);
-    }
-
-    if (!(reel.s3Key || reel.localPath)) {
-      return c.json({ error: "Video not downloaded yet" }, 400);
-    }
-
-    const jobId = await pipelineJobQueue.addAnalyzeEnchantingJob(reelId);
-
-    return c.json({
-      success: true,
-      message: "Enchanting analysis started (Gemini + ChatGPT)",
-      jobId,
-      reelId,
-    });
-  } catch (error) {
-    console.error("Analyze enchanting error:", error);
-    return c.json({ error: "Failed to start enchanting analysis" }, 500);
-  }
-});
-
-// Resize reel video
-reelsRouter.post("/:id/resize", async (c) => {
-  const reelId = c.req.param("id");
-
-  try {
-    const reel = await prisma.reel.findUnique({ where: { id: reelId } });
+    const reel = await prisma.reel.findUnique({ where: { id } });
     if (!reel) {
       return c.json({ error: "Reel not found" }, 404);
     }
@@ -757,196 +1249,100 @@ reelsRouter.post("/:id/resize", async (c) => {
 
     if (resized) {
       // Upload to S3
-      const s3Key = `reels/${reelId}.mp4`;
+      const s3Key = `reels/${id}.mp4`;
       await s3Service.uploadFile(s3Key, resizedBuffer, "video/mp4");
 
       // Update reel record
       await prisma.reel.update({
-        where: { id: reelId },
+        where: { id },
         data: { s3Key },
       });
 
-      return c.json({
-        success: true,
-        message: `Video resized from ${originalWidth}px to ${newWidth}px`,
-        resized: true,
-        originalWidth: Number(originalWidth),
-        newWidth: Number(newWidth),
-      });
+      return c.json(
+        {
+          success: true,
+          message: `Video resized from ${originalWidth}px to ${newWidth}px`,
+          resized: true,
+          originalWidth: Number(originalWidth),
+          newWidth: Number(newWidth),
+        },
+        200
+      );
     }
 
-    return c.json({
-      success: true,
-      message: "Video already within size limits",
-      resized: false,
-    });
+    return c.json(
+      {
+        success: true,
+        message: "Video already within size limits",
+        resized: false,
+      },
+      200
+    );
   } catch (error) {
     console.error("Resize reel error:", error);
     return c.json({ error: "Failed to resize video" }, 500);
   }
 });
 
-// ============================================
-// BATCH ENDPOINTS
-// ============================================
-
-// Batch refresh duration
-reelsRouter.post("/batch-refresh-duration", async (c) => {
+reelsRouter.openapi(batchRefreshDurationRoute, async (c) => {
   try {
-    const body = await c.req.json();
-    const { reelIds } = body as { reelIds?: string[] };
+    const { reelIds } = c.req.valid("json");
 
-    if (!(reelIds && Array.isArray(reelIds)) || reelIds.length === 0) {
-      return c.json({ error: "reelIds array is required" }, 400);
-    }
-
-    const result = await pipelineJobQueue.addBatchRefreshDurationJobs(reelIds);
-
-    return c.json({
-      success: true,
-      message: `Added ${result.count} refresh-duration jobs`,
-      jobIds: result.jobIds,
-      count: result.count,
+    const reels = await prisma.reel.findMany({
+      where: {
+        id: { in: reelIds },
+        OR: [{ s3Key: { not: null } }, { localPath: { not: null } }],
+      },
+      select: { id: true, s3Key: true, localPath: true },
     });
+
+    // We start a background task effectively
+    (async () => {
+      console.log(
+        `[BatchRefresh] Starting duration refresh for ${reels.length} reels`
+      );
+      const { parseBuffer } = await import("music-metadata");
+
+      for (const reel of reels) {
+        try {
+          const s3Key = reel.s3Key;
+          if (s3Key) {
+            const stream = await s3Service.getFileStream(s3Key);
+            if (stream) {
+              const buffer = await new Response(stream.stream).arrayBuffer();
+              const metadata = await parseBuffer(
+                Buffer.from(buffer),
+                "video/mp4"
+              );
+              if (metadata.format.duration) {
+                await prisma.reel.update({
+                  where: { id: reel.id },
+                  data: { duration: metadata.format.duration },
+                });
+                console.log(
+                  `[BatchRefresh] Updated duration for ${reel.id}: ${metadata.format.duration}`
+                );
+              }
+            }
+          }
+        } catch (e) {
+          console.error(`[BatchRefresh] Failed for ${reel.id}:`, e);
+        }
+      }
+    })();
+
+    return c.json(
+      { success: true, message: "Started background refresh" },
+      200
+    );
   } catch (error) {
-    console.error("Batch refresh duration error:", error);
+    console.error("Batch refresh error:", error);
     return c.json({ error: "Failed to start batch refresh" }, 500);
   }
 });
 
-// Batch analyze
-reelsRouter.post("/batch-analyze", async (c) => {
-  try {
-    const body = await c.req.json();
-    const { reelIds, mode = "standard" } = body as {
-      reelIds?: string[];
-      mode?: "standard" | "frames" | "enchanting";
-    };
-
-    if (!(reelIds && Array.isArray(reelIds)) || reelIds.length === 0) {
-      return c.json({ error: "reelIds array is required" }, 400);
-    }
-
-    const jobIds: string[] = [];
-    for (const reelId of reelIds) {
-      let jobId: string;
-      if (mode === "frames") {
-        jobId = await pipelineJobQueue.addAnalyzeFramesJob(reelId);
-      } else if (mode === "enchanting") {
-        jobId = await pipelineJobQueue.addAnalyzeEnchantingJob(reelId);
-      } else {
-        jobId = await pipelineJobQueue.addAnalyzeJob(reelId);
-      }
-      jobIds.push(jobId);
-    }
-
-    return c.json({
-      success: true,
-      message: `Added ${jobIds.length} ${mode} analysis jobs`,
-      jobIds,
-      count: jobIds.length,
-    });
-  } catch (error) {
-    console.error("Batch analyze error:", error);
-    return c.json({ error: "Failed to start batch analysis" }, 500);
-  }
-});
-
-// Batch resize
-reelsRouter.post("/batch-resize", async (c) => {
-  try {
-    const body = await c.req.json();
-    const { reelIds } = body as { reelIds?: string[] };
-
-    if (!(reelIds && Array.isArray(reelIds)) || reelIds.length === 0) {
-      return c.json({ error: "reelIds array is required" }, 400);
-    }
-
-    const results: Array<{
-      reelId: string;
-      success: boolean;
-      resized?: boolean;
-      error?: string;
-    }> = [];
-
-    for (const reelId of reelIds) {
-      try {
-        const reel = await prisma.reel.findUnique({ where: { id: reelId } });
-        if (!reel) {
-          results.push({ reelId, success: false, error: "Not found" });
-          continue;
-        }
-
-        if (!(reel.s3Key || reel.localPath)) {
-          results.push({ reelId, success: false, error: "No video" });
-          continue;
-        }
-
-        const sourceUrl = buildReelVideoUrl(reel);
-        if (!sourceUrl) {
-          results.push({ reelId, success: false, error: "No URL" });
-          continue;
-        }
-
-        const formData = new FormData();
-        formData.append("url", sourceUrl);
-
-        const response = await fetch(`${VIDEO_FRAMES_SERVICE_URL}/resize`, {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!response.ok) {
-          results.push({
-            reelId,
-            success: false,
-            error: await response.text(),
-          });
-          continue;
-        }
-
-        const resized = response.headers.get("X-Resized") === "true";
-
-        if (resized) {
-          const resizedBuffer = Buffer.from(await response.arrayBuffer());
-          const s3Key = `reels/${reelId}.mp4`;
-          await s3Service.uploadFile(s3Key, resizedBuffer, "video/mp4");
-          await prisma.reel.update({
-            where: { id: reelId },
-            data: { s3Key },
-          });
-        }
-
-        results.push({ reelId, success: true, resized });
-      } catch (err) {
-        results.push({
-          reelId,
-          success: false,
-          error: err instanceof Error ? err.message : "Unknown error",
-        });
-      }
-    }
-
-    const resizedCount = results.filter((r) => r.resized).length;
-
-    return c.json({
-      success: true,
-      message: `Processed ${results.length} reels, ${resizedCount} resized`,
-      results,
-    });
-  } catch (error) {
-    console.error("Batch resize error:", error);
-    return c.json({ error: "Failed to batch resize" }, 500);
-  }
-});
-
-// ============================================
-// DELETE ENDPOINTS
-// ============================================
-
-// Delete single reel
-reelsRouter.delete("/saved/:id", async (c) => {
-  const id = c.req.param("id");
+reelsRouter.openapi(resetReelStatusRoute, async (c) => {
+  const { id } = c.req.valid("param");
 
   try {
     const reel = await prisma.reel.findUnique({ where: { id } });
@@ -954,72 +1350,45 @@ reelsRouter.delete("/saved/:id", async (c) => {
       return c.json({ error: "Reel not found" }, 404);
     }
 
-    // Delete from S3 if exists
-    if (reel.s3Key) {
-      try {
-        await s3Service.deleteFile(reel.s3Key);
-      } catch (s3Error) {
-        console.error("Failed to delete from S3:", s3Error);
-      }
+    // Check if video is available
+    if (!(reel.s3Key || reel.localPath)) {
+      return c.json(
+        { error: "Cannot reset status: video not downloaded yet" },
+        400
+      );
     }
 
-    // Delete local file if exists
-    if (reel.localPath && existsSync(reel.localPath)) {
-      try {
-        await unlink(reel.localPath);
-      } catch (fsError) {
-        console.error("Failed to delete local file:", fsError);
-      }
-    }
-
-    // Delete related records
-    await prisma.videoAnalysis.deleteMany({
-      where: { sourceType: "reel", sourceId: id },
+    // Reset status to downloaded, clear error and progress
+    const updated = await prisma.reel.update({
+      where: { id },
+      data: {
+        status: "downloaded",
+        errorMessage: null,
+        progress: 0,
+        progressStage: "",
+        progressMessage: "",
+        lastActivityAt: new Date(),
+      },
     });
 
-    await prisma.reel.delete({ where: { id } });
+    // Log the reset
+    await pipelineLogger.info({
+      reelId: id,
+      stage: "analyze",
+      message: "Status reset to downloaded by user",
+    });
 
-    return c.json({ success: true, message: "Reel deleted" });
+    return c.json(
+      {
+        success: true,
+        message: "Status reset to downloaded",
+        reel: updated,
+      },
+      200
+    );
   } catch (error) {
-    console.error("Delete reel error:", error);
-    return c.json({ error: "Failed to delete reel" }, 500);
-  }
-});
-
-// Delete all reels
-reelsRouter.delete("/saved", async (c) => {
-  try {
-    // Get all reels for cleanup
-    const reels = await prisma.reel.findMany({
-      select: { id: true, s3Key: true, localPath: true },
-    });
-
-    // Delete from S3
-    for (const reel of reels) {
-      if (reel.s3Key) {
-        try {
-          await s3Service.deleteFile(reel.s3Key);
-        } catch (s3Error) {
-          console.error(`Failed to delete ${reel.s3Key} from S3:`, s3Error);
-        }
-      }
-    }
-
-    // Delete related records
-    await prisma.videoAnalysis.deleteMany({
-      where: { sourceType: "reel" },
-    });
-
-    const result = await prisma.reel.deleteMany();
-
-    return c.json({
-      success: true,
-      message: `Deleted ${result.count} reels`,
-      count: result.count,
-    });
-  } catch (error) {
-    console.error("Delete all reels error:", error);
-    return c.json({ error: "Failed to delete reels" }, 500);
+    console.error("Reset status error:", error);
+    return c.json({ error: "Failed to reset status" }, 500);
   }
 });
 

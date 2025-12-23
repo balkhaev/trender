@@ -58,5 +58,43 @@ model AILog {
   @@index([status])
 }
 
+// Job Health Tracking - отслеживание здоровья job'ов для выявления зависаний
+model JobHealthLog {
+  id                 String    @id @default(uuid())
+
+  // Job identification
+  queueName          String    // "reel-pipeline", "video-generation", etc.
+  jobId              String    // BullMQ job ID
+  entityId           String?   // reelId, generationId, etc.
+  entityType         String?   // "reel", "generation", "scene", "composite"
+
+  // Health status
+  status             String    // "healthy", "slow", "stalled", "recovered", "failed"
+  substage           String?   // детальный этап внутри stage
+
+  // Timing
+  startedAt          DateTime
+  lastActivityAt     DateTime
+  completedAt        DateTime?
+
+  // Thresholds
+  expectedDurationMs Int?      // ожидаемое время
+  actualDurationMs   Int?      // фактическое время
+
+  // Alert info
+  alertedAt          DateTime? // когда был отправлен alert
+  alertMessage       String?
+
+  metadata           Json?
+
+  createdAt          DateTime  @default(now())
+
+  @@index([queueName])
+  @@index([jobId])
+  @@index([status])
+  @@index([lastActivityAt])
+  @@index([entityId, entityType])
+}
+
 
 

@@ -1,10 +1,7 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import prisma from "@trender/db";
 import { computeTagTrends } from "../lib/tag-trends";
-import {
-  ErrorResponseSchema,
-  UnauthorizedResponseSchema,
-} from "../schemas/openapi";
+import { ErrorResponseSchema, UnauthorizedResponseSchema } from "../schemas";
 
 const tagsQuerySchema = z.object({
   hours: z.coerce

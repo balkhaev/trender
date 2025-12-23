@@ -1,0 +1,61 @@
+// Медиа-библиотека пользователя
+model UserMedia {
+  id        String   @id @default(uuid())
+  userId    String   // ID пользователя (из auth)
+  type      String   // "image" | "video"
+  filename  String   // Оригинальное имя файла
+  s3Key     String   // Ключ в S3/MinIO
+  url       String   // Публичный URL для доступа
+
+  // Размеры
+  size      Int      // Размер в байтах
+  width     Int?     // Ширина (для изображений/видео)
+  height    Int?     // Высота (для изображений/видео)
+  duration  Float?   // Длительность в секундах (для видео)
+
+  // Метаданные
+  mimeType  String?  // MIME тип файла
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// Конфигурация генерации (Simple/Expert mode)
+model GenerationConfig {
+  id           String   @id @default(uuid())
+  analysisId   String
+  mode         String   // "simple" | "expert"
+
+  // Simple mode: выбранные элементы с опциями
+  selections   Json     @default("[]") // [{elementId, selectedOptionId?, customMediaId?, customMediaUrl?}]
+
+  // Expert mode: промпт
+  prompt       String?
+
+  // Общие опции генерации
+  options      Json?    // {duration?: 5|10, aspectRatio?: string, keepAudio?: boolean}
+
+  // Scene-based конфигурация
+  sceneSelections Json? // [{sceneId, useOriginal, elementSelections?}]
+
+  // Референсные изображения
+  referenceImages String[] @default([])
+
+  // Итоговый сгенерированный промпт (для Simple mode)
+  generatedPrompt String?
+
+  // Оценка стоимости
+  estimatedCredits Int @default(0)
+
+  createdAt    DateTime @default(now())
+
+  // Relations
+  analysis     VideoAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+  generations  VideoGeneration[]
+
+  @@index([analysisId])
+  @@index([mode])
+}

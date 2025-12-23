@@ -653,3 +653,95 @@ export function resetKlingService(): void {
  * Check if Kling API is configured
  */
 export const isKlingConfigured = klingConfig.isConfigured;
+
+/**
+ * Response type for /account/costs endpoint
+ */
+type KlingAccountCostsResponse = {
+  code: number;
+  message: string;
+  request_id: string;
+  data?: {
+    code: number;
+    msg: string;
+    resource_pack_subscribe_infos: {
+      resource_pack_name: string;
+      resource_pack_id: string;
+      resource_pack_type: "decreasing_total" | "constant_period";
+      total_quantity: number;
+      remaining_quantity: number;
+      purchase_time: number;
+      effective_time: number;
+      invalid_time: number;
+      status: "toBeOnline" | "online" | "expired" | "runOut";
+    }[];
+  };
+};
+
+export type KlingBalanceResult = {
+  remainingTokens: number;
+  error?: string;
+};
+
+/**
+ * Get account balance (sum of all active resource packs)
+ * This is a static method that creates its own auth to call /account/costs
+ */
+export async function getKlingAccountBalance(): Promise<KlingBalanceResult> {
+  if (!klingConfig.isConfigured()) {
+    return { remainingTokens: 0, error: "Kling API not configured" };
+  }
+
+  try {
+    const token = generateJwtToken(
+      klingConfig.accessKey,
+      klingConfig.secretKey
+    );
+
+    // /account/costs is NOT under /v1, use base URL without version
+    let baseUrl = klingConfig.apiUrl.replace(TRAILING_SLASH_REGEX, "");
+    if (baseUrl.endsWith("/v1")) {
+      baseUrl = baseUrl.slice(0, -3);
+    }
+
+    // Query params: last year to now
+    const now = Date.now();
+    const oneYearAgo = now - 365 * 24 * 60 * 60 * 1000;
+    const url = `${baseUrl}/account/costs?start_time=${oneYearAgo}&end_time=${now}`;
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      return {
+        remainingTokens: 0,
+        error: `API error ${response.status}: ${error}`,
+      };
+    }
+
+    const data = (await response.json()) as KlingAccountCostsResponse;
+
+    if (data.code !== 0 || !data.data?.resource_pack_subscribe_infos) {
+      return {
+        remainingTokens: 0,
+        error: data.message || "Failed to get balance",
+      };
+    }
+
+    // Sum remaining_quantity of all active ("online") packs
+    const activeTokens = data.data.resource_pack_subscribe_infos
+      .filter((pack) => pack.status === "online")
+      .reduce((sum, pack) => sum + pack.remaining_quantity, 0);
+
+    return { remainingTokens: Math.floor(activeTokens) };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return { remainingTokens: 0, error: msg };
+  }
+}

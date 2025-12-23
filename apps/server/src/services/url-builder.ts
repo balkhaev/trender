@@ -64,6 +64,13 @@ export function getReferenceImagePublicUrl(
 }
 
 /**
+ * URL для медиа из библиотеки пользователя
+ */
+export function getMediaPublicUrl(s3Key: string): string {
+  return buildPublicUrl(`/api/files/media/${encodeURIComponent(s3Key)}`);
+}
+
+/**
  * Универсальная функция для получения videoUrl рила
  * Выбирает: s3Key -> localPath -> null
  */

@@ -55,7 +55,12 @@ export const pipelineWorker = new Worker<PipelineJobData, PipelineJobResult>(
         }
 
         case "analyze": {
-          await updateProgress(job, "analyze", 20, "Starting analysis...");
+          await updateProgress(
+            job,
+            "analyze",
+            20,
+            "Starting scene-based analysis (PySceneDetect + Gemini)..."
+          );
 
           const analysis = await reelPipeline.analyzeReel(reelId);
           await job.updateProgress(70);
@@ -180,13 +185,18 @@ export const pipelineWorker = new Worker<PipelineJobData, PipelineJobResult>(
         case "refresh-duration": {
           await job.updateProgress(20);
 
-          const metadataResponse = await fetch(
+          const { fetchWithTimeout, FETCH_TIMEOUTS } = await import(
+            "../../utils/fetch-with-timeout"
+          );
+
+          const metadataResponse = await fetchWithTimeout(
             `${SCRAPPER_SERVICE_URL}/metadata`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ shortcode: reelId }),
-            }
+            },
+            FETCH_TIMEOUTS.metadata
           );
 
           if (!metadataResponse.ok) {
@@ -321,14 +331,16 @@ export const pipelineJobQueue = {
 
   /**
    * Add an analyze-only job (requires downloaded video)
+   * Uses enchanting analysis (Gemini + ChatGPT) by default
    */
   async addAnalyzeJob(reelId: string): Promise<string> {
     const jobId = `analyze-${reelId}-${Date.now()}`;
 
     // Сначала добавляем job в очередь, потом обновляем статус
+    // По умолчанию используем enchanting (Gemini + ChatGPT)
     const job = await pipelineQueue.add(
-      "analyze",
-      { reelId, action: "analyze" },
+      "analyze-enchanting",
+      { reelId, action: "analyze-enchanting" },
       { jobId }
     );
 
@@ -351,28 +363,6 @@ export const pipelineJobQueue = {
     const job = await pipelineQueue.add(
       "analyze-frames",
       { reelId, action: "analyze-frames" },
-      { jobId }
-    );
-
-    // Обновляем статус только после успешного добавления job
-    await prisma.reel.update({
-      where: { id: reelId },
-      data: { status: "analyzing" },
-    });
-
-    return job.id ?? jobId;
-  },
-
-  /**
-   * Add enchanting analysis job (Gemini + ChatGPT for creative variants)
-   */
-  async addAnalyzeEnchantingJob(reelId: string): Promise<string> {
-    const jobId = `analyze-enchanting-${reelId}-${Date.now()}`;
-
-    // Сначала добавляем job в очередь, потом обновляем статус
-    const job = await pipelineQueue.add(
-      "analyze-enchanting",
-      { reelId, action: "analyze-enchanting" },
       { jobId }
     );
 
@@ -476,7 +466,6 @@ export const pipelineJobQueue = {
       `download-${reelId}-`,
       `analyze-${reelId}-`,
       `analyze-frames-${reelId}-`,
-      `analyze-enchanting-${reelId}-`,
       `analyze-scenes-${reelId}-`,
       `refresh-duration-${reelId}-`,
     ];

@@ -2,7 +2,7 @@
 
 import { ImagePlus, Mountain, Package, Trash2, User } from "lucide-react";
 import Image from "next/image";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -233,6 +233,9 @@ export function ElementRemixSelector({
   const [selections, setSelections] = useState<ElementSelection[]>([]);
   const [uploadingElement, setUploadingElement] = useState<string | null>(null);
 
+  // Track if we've notified parent to avoid infinite loops
+  const lastNotifiedRef = useRef<string>("");
+
   // Get selection for an element
   const getSelection = (elementId: string) =>
     selections.find((s) => s.elementId === elementId);
@@ -274,7 +277,14 @@ export function ElementRemixSelector({
 
   // Notify parent when selections change
   useEffect(() => {
-    onSelectionChange(selections);
+    // Only notify if selections actually changed (compare serialized)
+    const serialized = JSON.stringify(
+      selections.map((s) => s.elementId + s.selectedOptionId)
+    );
+    if (serialized !== lastNotifiedRef.current) {
+      lastNotifiedRef.current = serialized;
+      onSelectionChange(selections);
+    }
   }, [selections, onSelectionChange]);
 
   // Handle option selection

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { DebugAIMetrics } from "@/components/debug/debug-ai-metrics";
 import { DebugLogsTable } from "@/components/debug/debug-logs-table";
 import { DebugOverview } from "@/components/debug/debug-overview";
+import { HealthAlerts } from "@/components/debug/health-alerts";
 import { QueueManager } from "@/components/queue-manager";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -17,6 +18,10 @@ export default function DebugPage() {
         <p className="mt-1 text-muted-foreground">
           Мониторинг логов, AI сервисов и очередей
         </p>
+      </div>
+
+      <div className="mb-6">
+        <HealthAlerts />
       </div>
 
       <Tabs onValueChange={setActiveTab} value={activeTab}>
