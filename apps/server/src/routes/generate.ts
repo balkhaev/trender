@@ -14,6 +14,7 @@ import {
   buildReelVideoUrl,
   getGenerationVideoPublicUrl,
 } from "../services/url-builder";
+import { buildPromptFromSelections } from "../utils/prompt-builder";
 
 const app = new OpenAPIHono();
 
@@ -197,10 +198,43 @@ app.openapi(generateRoute, async (c) => {
             endTime: scene.endTime,
           });
         } else {
-          // Start generation for this scene
+          // Build prompt for this specific scene from its elementSelections
+          let scenePrompt = finalPrompt;
+          let sceneImageUrls = configData.referenceImages;
+
+          // If scene has its own elementSelections, build prompt from them
+          if (
+            selection.elementSelections &&
+            selection.elementSelections.length > 0
+          ) {
+            const sceneElements = scene.elements as Array<{
+              id: string;
+              type: string;
+              label: string;
+              description: string;
+              remixOptions: Array<{
+                id: string;
+                label: string;
+                prompt: string;
+              }>;
+            }>;
+
+            const { prompt: builtPrompt, imageUrls } =
+              buildPromptFromSelections(
+                sceneElements,
+                selection.elementSelections
+              );
+
+            if (builtPrompt) {
+              scenePrompt = builtPrompt;
+              sceneImageUrls = imageUrls;
+            }
+          }
+
+          // Start generation for this scene with its own prompt
           const sceneGenerationId = await sceneGenJobQueue.startSceneGeneration(
             scene.id,
-            finalPrompt,
+            scenePrompt,
             sourceVideoUrl,
             scene.startTime,
             scene.endTime,
@@ -213,10 +247,7 @@ app.openapi(generateRoute, async (c) => {
                 | "auto"
                 | undefined,
               keepAudio: genOptions.keepAudio,
-              imageUrls:
-                configData.referenceImages.length > 0
-                  ? configData.referenceImages
-                  : undefined,
+              imageUrls: sceneImageUrls.length > 0 ? sceneImageUrls : undefined,
             }
           );
 

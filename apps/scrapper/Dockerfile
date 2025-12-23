@@ -26,7 +26,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir -r requirements.txt
 
 # Copy application
-COPY apps/scrapper/main.py ./
+COPY apps/scrapper/main.py apps/scrapper/tracing.py ./
 
 # Runtime data (session, optional downloads)
 ENV DOWNLOADS_DIR=/data/downloads \

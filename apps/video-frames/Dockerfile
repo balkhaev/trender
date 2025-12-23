@@ -29,7 +29,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir -r requirements.txt
 
 # Copy application
-COPY apps/video-frames/main.py ./
+COPY apps/video-frames/main.py apps/video-frames/tracing.py ./
 
 # Runtime configuration
 ENV PORT=8002 \
