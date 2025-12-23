@@ -10,6 +10,7 @@ import { type GeminiProgressCallback, getGeminiService } from "../gemini";
 import { getOpenAIService, isOpenAIConfigured } from "../openai";
 import { pipelineLogger } from "../pipeline-logger";
 import { getS3Key, isS3Configured, s3Service } from "../s3";
+import { getMediaPublicUrl } from "../url-builder";
 import { loadVideoBuffer } from "../video/video-loader";
 
 // Service URLs
@@ -195,7 +196,7 @@ async function uploadThumbnail(
     );
     await s3Service.uploadFile(s3Key, buffer, "image/jpeg");
 
-    const url = await s3Service.getPublicUrl(s3Key);
+    const url = getMediaPublicUrl(s3Key);
     return { url, s3Key };
   } catch (error) {
     console.error(`Failed to upload thumbnail for scene ${sceneIndex}:`, error);

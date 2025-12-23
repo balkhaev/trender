@@ -523,6 +523,20 @@ export default function ReelDetailPage() {
                   </a>
                 </Button>
 
+                {/* Download video to device - only show when video exists */}
+                {hasVideo(data.reel) && data.reel.videoUrl && (
+                  <Button
+                    asChild
+                    className="transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                    variant="outline"
+                  >
+                    <a download href={data.reel.videoUrl}>
+                      <Download className="mr-2 h-4 w-4" />
+                      Скачать видео
+                    </a>
+                  </Button>
+                )}
+
                 {/* Resize button - only show when video exists */}
                 {hasVideo(data.reel) && (
                   <Button
