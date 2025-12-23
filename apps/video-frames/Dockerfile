@@ -15,8 +15,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         curl ca-certificates ffmpeg \
-        # OpenCV dependencies for PySceneDetect
-        libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender1 && \
+        # OpenCV dependencies for PySceneDetect (libgl1 replaces libgl1-mesa-glx in Debian 13+)
+        libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 && \
     rm -rf /var/lib/apt/lists/*
 
 # Create non-root user (skip if already exists)
