@@ -739,3 +739,89 @@ export async function removeBookmark(
 
   return response.json();
 }
+
+// ===== Scene-based Generation API =====
+
+/**
+ * Тип для передачи на бэкенд
+ */
+export type SceneSelection = {
+  sceneId: string;
+  useOriginal: boolean;
+  elementSelections?: {
+    elementId: string;
+    selectedOptionId?: string;
+    customMediaUrl?: string;
+  }[];
+};
+
+/**
+ * Ответ от POST /api/generate
+ */
+export type GenerateResponse = {
+  success: boolean;
+  generationId?: string;
+  compositeGenerationId?: string;
+  type: "full" | "composite";
+  status: "queued";
+};
+
+/**
+ * Статус composite генерации
+ */
+export type CompositeStatus = {
+  compositeGenerationId: string;
+  status:
+    | "pending"
+    | "waiting"
+    | "concatenating"
+    | "uploading"
+    | "completed"
+    | "failed";
+  progress: number;
+  stage?: string;
+  message?: string;
+  result?: { videoUrl: string };
+  error?: string;
+};
+
+/**
+ * Запустить scene-based генерацию
+ */
+export async function generateWithScenes(
+  analysisId: string,
+  sceneSelections: SceneSelection[],
+  options?: KlingGenerationOptions
+): Promise<GenerateResponse> {
+  const response = await fetch(`${API_URL}/api/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ analysisId, sceneSelections, options }),
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to start generation");
+  }
+
+  return response.json();
+}
+
+/**
+ * Получить статус composite генерации
+ */
+export async function getCompositeStatus(
+  compositeId: string
+): Promise<CompositeStatus> {
+  const response = await fetch(
+    `${API_URL}/api/generate/${compositeId}/composite-status`,
+    { credentials: "include" }
+  );
+
+  if (!response.ok) {
+    throw new Error("Failed to get composite status");
+  }
+
+  return response.json();
+}

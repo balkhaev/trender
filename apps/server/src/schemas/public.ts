@@ -541,6 +541,9 @@ export const GenerateRequestSchema = z
     prompt: z.string().optional().openapi({
       description: "Direct prompt (for quick generate)",
     }),
+    sceneSelections: z.array(SceneSelectionSchema).optional().openapi({
+      description: "Direct scene selections for scene-based generation",
+    }),
     options: GenerationOptionsSchema.optional(),
   })
   .openapi("GenerateRequest");

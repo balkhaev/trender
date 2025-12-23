@@ -1,0 +1,70 @@
+import type { ElementSelection } from "@/components/flat-element-list";
+import type { SceneSelection, VideoElement, VideoScene } from "./templates-api";
+
+/**
+ * Строит sceneSelections из выбранных элементов.
+ * Определяет какие сцены затронуты на основе appearances элементов.
+ */
+export function buildSceneSelections(
+  elements: VideoElement[],
+  scenes: VideoScene[],
+  selections: ElementSelection[]
+): SceneSelection[] {
+  const activeSelections = selections.filter(
+    (s) => s.selectedOptionId !== null
+  );
+  if (activeSelections.length === 0) return [];
+
+  // Собираем индексы затронутых сцен
+  const affectedSceneIndexes = new Set<number>();
+  for (const selection of activeSelections) {
+    const element = elements.find((e) => e.id === selection.elementId);
+    if (!element) continue;
+    for (const appearance of element.appearances) {
+      affectedSceneIndexes.add(appearance.sceneIndex);
+    }
+  }
+
+  // Строим sceneSelections для каждой сцены
+  return scenes.map((scene) => {
+    if (affectedSceneIndexes.has(scene.index)) {
+      // Сцена затронута - нужна генерация
+      const sceneElementSelections = activeSelections
+        .filter((sel) => {
+          const el = elements.find((e) => e.id === sel.elementId);
+          return el?.appearances.some((a) => a.sceneIndex === scene.index);
+        })
+        .map((sel) => ({
+          elementId: sel.elementId,
+          selectedOptionId: sel.selectedOptionId || undefined,
+          customMediaUrl: sel.customImageUrl,
+        }));
+
+      return {
+        sceneId: scene.id,
+        useOriginal: false,
+        elementSelections: sceneElementSelections,
+      };
+    }
+
+    // Сцена не затронута - используем оригинал
+    return {
+      sceneId: scene.id,
+      useOriginal: true,
+    };
+  });
+}
+
+/**
+ * Проверяет можно ли использовать scene-based генерацию
+ */
+export function canUseSceneGeneration(
+  scenes: VideoScene[] | undefined,
+  selections: ElementSelection[]
+): boolean {
+  return (
+    scenes !== undefined &&
+    scenes.length > 0 &&
+    selections.some((s) => s.selectedOptionId !== null)
+  );
+}

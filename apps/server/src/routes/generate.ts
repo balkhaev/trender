@@ -67,7 +67,13 @@ const generateRoute = createRoute({
 });
 
 app.openapi(generateRoute, async (c) => {
-  const { configurationId, analysisId, prompt, options } = c.req.valid("json");
+  const {
+    configurationId,
+    analysisId,
+    prompt,
+    options,
+    sceneSelections: directSceneSelections,
+  } = c.req.valid("json");
 
   try {
     // Get config from DB or build from direct parameters
@@ -157,7 +163,11 @@ app.openapi(generateRoute, async (c) => {
 
     let sceneSelections: SceneSelection[] = [];
 
-    if (configurationId) {
+    // Сначала проверяем прямую передачу sceneSelections
+    if (directSceneSelections && directSceneSelections.length > 0) {
+      sceneSelections = directSceneSelections;
+    } else if (configurationId) {
+      // Fallback на конфигурацию из БД
       const fullConfig = await prisma.generationConfig.findUnique({
         where: { id: configurationId },
       });

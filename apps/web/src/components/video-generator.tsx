@@ -28,9 +28,11 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { buildElementPrompt, canGenerate } from "@/lib/remix-prompt";
-import type {
-  KlingGenerationOptions,
-  TemplateAnalysis,
+import { buildSceneSelections, canUseSceneGeneration } from "@/lib/scene-utils";
+import {
+  generateWithScenes,
+  type KlingGenerationOptions,
+  type TemplateAnalysis,
 } from "@/lib/templates-api";
 
 // Типы анализа для UI
@@ -224,6 +226,35 @@ export function VideoGenerator({
       keepAudio,
     };
 
+    const scenes = currentAnalysis.videoScenes;
+
+    // Scene-based генерация если есть сцены
+    if (canUseSceneGeneration(scenes, elementSelections)) {
+      const sceneSelections = buildSceneSelections(
+        allElements,
+        scenes!,
+        elementSelections
+      );
+
+      try {
+        const result = await generateWithScenes(
+          currentAnalysis.id,
+          sceneSelections,
+          options
+        );
+
+        if (result.type === "composite" && result.compositeGenerationId) {
+          toast.success("Генерация по сценам запущена");
+        }
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Ошибка генерации"
+        );
+      }
+      return;
+    }
+
+    // Fallback на обычную генерацию полного видео
     if (elementRefs.length > 0) {
       options.elements = elementRefs;
     }
@@ -235,6 +266,8 @@ export function VideoGenerator({
     canGenerateNow,
     generatedPrompt,
     elementRefs,
+    elementSelections,
+    allElements,
     duration,
     aspectRatio,
     keepAudio,
