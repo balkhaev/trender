@@ -426,12 +426,21 @@ reelsRouter.get("/:id/debug", async (c) => {
       metadata: log.metadata,
     }));
 
-    // Получаем ID генераций для этого рила
+    // Получаем все анализы для этого рила
+    const analyses = await prisma.videoAnalysis.findMany({
+      where: {
+        sourceId: id,
+        sourceType: "reel",
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    // Получаем генерации для этого рила (полные данные)
     const generations = await prisma.videoGeneration.findMany({
       where: {
         analysis: { sourceId: id, sourceType: "reel" },
       },
-      select: { id: true },
+      orderBy: { createdAt: "desc" },
     });
     const generationIds = generations.map((g) => g.id);
 
@@ -457,6 +466,11 @@ reelsRouter.get("/:id/debug", async (c) => {
       timeline,
       logs,
       aiLogs,
+      // Дополнительные поля для фронтенда
+      analyses,
+      template: reel.template,
+      generations,
+      videoUrl,
     });
   } catch (error) {
     console.error("Debug endpoint error:", error);
