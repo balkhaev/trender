@@ -26,7 +26,7 @@ export function buildPublicUrl(path: string): string {
  * URL для видео рила (S3)
  */
 export function getReelVideoPublicUrl(reelId: string): string {
-  return buildPublicUrl(`/api/files/reels/${reelId}`);
+  return buildPublicUrl(`/api/files/reels/${reelId}.mp4`);
 }
 
 /**
@@ -43,7 +43,7 @@ export function getReelLocalVideoPublicUrl(
  * URL для сгенерированного видео (S3)
  */
 export function getGenerationVideoPublicUrl(generationId: string): string {
-  return buildPublicUrl(`/api/files/generations/${generationId}`);
+  return buildPublicUrl(`/api/files/generations/${generationId}.mp4`);
 }
 
 /**

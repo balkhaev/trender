@@ -195,29 +195,73 @@ export class KlingService {
 
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    retries = 3
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
+    const retryableStatuses = [502, 503, 504, 429];
+    let lastError: Error | null = null;
 
-    const token = this.getAuthToken();
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        ...options.headers,
-      },
-    });
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const token = this.getAuthToken();
+        const response = await fetch(url, {
+          ...options,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+            ...options.headers,
+          },
+        });
 
-    if (!response.ok) {
-      const error = await response.text();
-      this.log("error", `Ошибка API: ${response.status}`, {
-        error: error.slice(0, 200),
-      });
-      throw new Error(`Kling API error ${response.status}: ${error}`);
+        if (!response.ok) {
+          const error = await response.text();
+
+          // Retry on temporary errors
+          if (
+            retryableStatuses.includes(response.status) &&
+            attempt < retries
+          ) {
+            const delay = Math.min(1000 * 2 ** attempt, 30_000); // exponential backoff, max 30s
+            this.log(
+              "info",
+              `Ошибка ${response.status}, повтор через ${delay / 1000}с (${attempt}/${retries})`
+            );
+            await this.sleep(delay);
+            continue;
+          }
+
+          this.log("error", `Ошибка API: ${response.status}`, {
+            error: error.slice(0, 200),
+          });
+          throw new Error(`Kling API error ${response.status}: ${error}`);
+        }
+
+        return (await response.json()) as T;
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+
+        // Retry on network errors
+        const isNetworkError =
+          lastError.message.includes("fetch failed") ||
+          lastError.message.includes("ECONNRESET") ||
+          lastError.message.includes("ETIMEDOUT");
+
+        if (isNetworkError && attempt < retries) {
+          const delay = Math.min(1000 * 2 ** attempt, 30_000);
+          this.log(
+            "info",
+            `Сетевая ошибка, повтор через ${delay / 1000}с (${attempt}/${retries})`
+          );
+          await this.sleep(delay);
+          continue;
+        }
+
+        throw lastError;
+      }
     }
 
-    return (await response.json()) as T;
+    throw lastError || new Error("Request failed after retries");
   }
 
   /**
@@ -608,6 +652,14 @@ export class KlingService {
       return {
         success: false,
         error: `Превышен лимит запросов Kling (${accessKeyPreview}). Попробуйте позже.`,
+      };
+    }
+
+    // Gateway errors (502, 503, 504)
+    if (msg.includes("502") || msg.includes("503") || msg.includes("504")) {
+      return {
+        success: false,
+        error: `Сервер Kling временно недоступен. Попробуйте позже. [key: ${accessKeyPreview}]`,
       };
     }
 

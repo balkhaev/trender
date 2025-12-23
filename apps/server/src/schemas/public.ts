@@ -676,3 +676,132 @@ export const BookmarkResponseSchema = z
     templateId: z.string(),
   })
   .openapi("BookmarkResponse");
+
+// ===== ASSET GENERATION SCHEMAS =====
+
+export const AssetCategorySchema = z
+  .enum(["background", "character", "object", "texture"])
+  .openapi("AssetCategory");
+
+export const AssetAspectRatioSchema = z
+  .enum(["1:1", "3:4", "4:3", "9:16", "16:9"])
+  .openapi("AssetAspectRatio");
+
+export const AssetGenerateRequestSchema = z
+  .object({
+    prompt: z.string().min(1).max(1000).openapi({
+      description: "Описание изображения для генерации",
+      example: "Футуристический город на закате с неоновыми вывесками",
+    }),
+    category: AssetCategorySchema.openapi({
+      description: "Категория ассета",
+    }),
+    aspectRatio: AssetAspectRatioSchema.default("1:1").openapi({
+      description: "Соотношение сторон",
+    }),
+    style: z.string().optional().openapi({
+      description: "Стиль генерации (realistic, cartoon, anime, 3d и т.д.)",
+      example: "realistic",
+    }),
+  })
+  .openapi("AssetGenerateRequest");
+
+export const GeneratedAssetSchema = z
+  .object({
+    id: z.string(),
+    url: z.string(),
+    prompt: z.string(),
+    category: AssetCategorySchema,
+    width: z.number().optional(),
+    height: z.number().optional(),
+  })
+  .openapi("GeneratedAsset");
+
+export const AssetGenerateResponseSchema = z
+  .object({
+    success: z.boolean(),
+    asset: GeneratedAssetSchema,
+  })
+  .openapi("AssetGenerateResponse");
+
+export const AssetCategoryInfoSchema = z
+  .object({
+    id: z.string(),
+    label: z.string(),
+    description: z.string(),
+    examples: z.array(z.string()),
+  })
+  .openapi("AssetCategoryInfo");
+
+export const AssetCategoriesResponseSchema = z
+  .object({
+    categories: z.array(AssetCategoryInfoSchema),
+  })
+  .openapi("AssetCategoriesResponse");
+
+export const AssetStylePresetSchema = z
+  .object({
+    id: z.string(),
+    label: z.string(),
+    description: z.string(),
+  })
+  .openapi("AssetStylePreset");
+
+export const AssetStylePresetsResponseSchema = z
+  .object({
+    styles: z.array(AssetStylePresetSchema),
+  })
+  .openapi("AssetStylePresetsResponse");
+
+// Расширение MediaItemSchema для сгенерированных ассетов
+export const ExtendedMediaItemSchema = MediaItemSchema.extend({
+  source: z.enum(["upload", "generated"]).openapi({
+    description: "Источник медиа",
+  }),
+  category: z.string().nullable().openapi({
+    description: "Категория (для сгенерированных)",
+  }),
+  prompt: z.string().nullable().openapi({
+    description: "Промпт генерации",
+  }),
+  style: z.string().nullable().openapi({
+    description: "Стиль генерации",
+  }),
+}).openapi("ExtendedMediaItem");
+
+export const ExtendedPersonalMediaQuerySchema = z.object({
+  type: z
+    .enum(["image", "video", "all"])
+    .default("all")
+    .openapi({ param: { name: "type", in: "query" } }),
+  source: z
+    .enum(["upload", "generated", "all"])
+    .default("all")
+    .openapi({ param: { name: "source", in: "query" } }),
+  category: z
+    .string()
+    .optional()
+    .openapi({ param: { name: "category", in: "query" } }),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(50)
+    .openapi({ param: { name: "limit", in: "query" } }),
+  offset: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .default(0)
+    .openapi({ param: { name: "offset", in: "query" } }),
+});
+
+export const ExtendedPersonalMediaResponseSchema = z
+  .object({
+    items: z.array(ExtendedMediaItemSchema),
+    total: z.number(),
+    limit: z.number(),
+    offset: z.number(),
+  })
+  .openapi("ExtendedPersonalMediaResponse");

@@ -37,6 +37,9 @@ publicApi.route("/remix", remixRouterModule.remixRouter);
 const generateRouterModule = await import("./routes/generate");
 publicApi.route("/generate", generateRouterModule.generateRouter);
 
+const assetsRouterModule = await import("./routes/assets");
+publicApi.route("/assets", assetsRouterModule.assetsRouter);
+
 // ============================================
 // INTERNAL API (админка, дебаг)
 // ============================================

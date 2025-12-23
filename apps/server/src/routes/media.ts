@@ -4,8 +4,6 @@ import {
   ErrorResponseSchema,
   MediaUploadResponseSchema,
   NotFoundResponseSchema,
-  PersonalMediaQuerySchema,
-  PersonalMediaResponseSchema,
   StockMediaQuerySchema,
   StockMediaResponseSchema,
 } from "../schemas";
@@ -35,15 +33,16 @@ const personalMediaRoute = createRoute({
   path: "/personal",
   summary: "Get personal media library",
   tags: ["Media"],
-  description: "Returns user's uploaded media files (images and videos).",
+  description:
+    "Returns user's uploaded and generated media files with filtering options.",
   request: {
-    query: PersonalMediaQuerySchema,
+    query: ExtendedPersonalMediaQuerySchema,
   },
   responses: {
     200: {
       content: {
         "application/json": {
-          schema: PersonalMediaResponseSchema,
+          schema: ExtendedPersonalMediaResponseSchema,
         },
       },
       description: "Media list",
@@ -52,15 +51,29 @@ const personalMediaRoute = createRoute({
 });
 
 app.openapi(personalMediaRoute, async (c) => {
-  const { type, limit, offset } = c.req.valid("query");
+  const { type, source, category, limit, offset } = c.req.valid("query");
 
   // TODO: Get userId from auth session
   const userId = "default-user";
 
-  const where = {
+  const where: {
+    userId: string;
+    type?: string;
+    source?: string;
+    category?: string;
+  } = {
     userId,
-    ...(type !== "all" && { type }),
   };
+
+  if (type !== "all") {
+    where.type = type;
+  }
+  if (source !== "all") {
+    where.source = source;
+  }
+  if (category) {
+    where.category = category;
+  }
 
   const [items, total] = await Promise.all([
     prisma.userMedia.findMany({
@@ -85,6 +98,10 @@ app.openapi(personalMediaRoute, async (c) => {
       duration: item.duration,
       mimeType: item.mimeType,
       createdAt: item.createdAt.toISOString(),
+      source: (item.source || "upload") as "upload" | "generated",
+      category: item.category,
+      prompt: item.prompt,
+      style: item.style,
     })),
     total,
     limit,

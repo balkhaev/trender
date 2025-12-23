@@ -27,6 +27,25 @@ export type DetectableElement = {
   remixOptions: RemixOption[]; // 4 transformation options
 };
 
+// Element appearance in a scene
+export type ElementAppearance = {
+  sceneId: string;
+  sceneIndex: number;
+  startTime: number;
+  endTime: number;
+};
+
+// Video element with scene appearances (new unified model)
+export type VideoElement = {
+  id: string;
+  type: "character" | "object" | "background";
+  label: string;
+  description: string;
+  remixOptions: RemixOption[];
+  appearances: ElementAppearance[];
+  thumbnailUrl?: string | null;
+};
+
 // Scene detected by PySceneDetect with its own elements
 export type VideoScene = {
   id: string;
@@ -36,7 +55,8 @@ export type VideoScene = {
   duration: number;
   thumbnailUrl: string | null;
   thumbnailS3Key: string | null;
-  elements: DetectableElement[];
+  elements: DetectableElement[]; // Legacy: per-scene elements
+  elementIds?: string[]; // New: references to VideoElement IDs
   generationStatus:
     | "none"
     | "pending"
@@ -55,8 +75,10 @@ export type TemplateAnalysis = {
   createdAt?: string;
   duration: number | null;
   aspectRatio: string;
-  // Main data - Smart Remix Elements
+  // Main data - Smart Remix Elements (legacy)
   elements?: DetectableElement[];
+  // New unified elements with appearances
+  videoElements?: VideoElement[];
   // Scene-based analysis data
   hasScenes?: boolean;
   scenesCount?: number;

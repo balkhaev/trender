@@ -14,6 +14,18 @@ export default function Header() {
           <nav className="flex items-center gap-3 text-sm">
             <Link
               className="text-muted-foreground hover:text-foreground"
+              href="/library"
+            >
+              Библиотека
+            </Link>
+            <Link
+              className="text-muted-foreground hover:text-foreground"
+              href="/assets"
+            >
+              Ассеты
+            </Link>
+            <Link
+              className="text-muted-foreground hover:text-foreground"
               href="/idea"
             >
               Идея

@@ -557,3 +557,331 @@ class SceneAnalysisService {
 }
 
 export const sceneAnalysisService = new SceneAnalysisService();
+
+/**
+ * Merge elements with appearances with remix options from ChatGPT
+ */
+async function mergeUnifiedElementsWithOptions(
+  elements: Array<{
+    id: string;
+    type: "character" | "object" | "background";
+    label: string;
+    description: string;
+    appearances: Array<{
+      sceneIndex: number;
+      startTime: number;
+      endTime: number;
+    }>;
+  }>,
+  reelId: string
+): Promise<
+  Array<{
+    id: string;
+    type: "character" | "object" | "background";
+    label: string;
+    description: string;
+    appearances: Array<{
+      sceneIndex: number;
+      startTime: number;
+      endTime: number;
+    }>;
+    remixOptions: RemixOption[];
+  }>
+> {
+  // Prepare elements without appearances for ChatGPT
+  const elementsForChatGPT = elements.map((el) => ({
+    id: el.id,
+    type: el.type,
+    label: el.label,
+    description: el.description,
+  }));
+
+  const remixOptionsMap = new Map<string, RemixOption[]>();
+
+  if (isOpenAIConfigured() && elementsForChatGPT.length > 0) {
+    try {
+      const openaiService = getOpenAIService();
+      const enchantingResults =
+        await openaiService.generateEnchantingOptions(elementsForChatGPT);
+
+      for (const result of enchantingResults) {
+        remixOptionsMap.set(result.id, result.remixOptions);
+      }
+    } catch (openaiError) {
+      await pipelineLogger.warn({
+        reelId,
+        stage: "analyze",
+        message: `ChatGPT error: ${openaiError instanceof Error ? openaiError.message : String(openaiError)}`,
+      });
+    }
+  }
+
+  return elements.map((element) => ({
+    ...element,
+    remixOptions: remixOptionsMap.get(element.id) || [],
+  }));
+}
+
+/**
+ * Analyze video with unified approach:
+ * 1. Detect scenes with PySceneDetect
+ * 2. Upload video to Gemini once
+ * 3. Analyze entire video with scene boundaries
+ * 4. Return flat list of unique elements with appearances
+ */
+export async function analyzeReelUnified(
+  reelId: string,
+  callbacks: SceneAnalysisProgressCallbacks,
+  options: {
+    threshold?: number;
+    minSceneLen?: number;
+  } = {}
+): Promise<VideoAnalysis> {
+  const { threshold = 27.0, minSceneLen = 1.0 } = options;
+
+  const reel = await prisma.reel.findUnique({ where: { id: reelId } });
+  if (!reel) {
+    throw new Error(`Reel ${reelId} not found`);
+  }
+
+  if (!(reel.s3Key || reel.localPath)) {
+    throw new Error(`Reel ${reelId} has no video file. Download first.`);
+  }
+
+  await callbacks.updateStatus(reelId, "analyzing");
+  await callbacks.updateProgress(
+    reelId,
+    "analyze",
+    0,
+    "Начало unified анализа..."
+  );
+
+  const timer = pipelineLogger.startTimer(
+    reelId,
+    "analyze",
+    "Analyzing video with unified approach"
+  );
+
+  const onProgress: GeminiProgressCallback = async (
+    stage,
+    percent,
+    message
+  ) => {
+    await callbacks.updateProgress(reelId, stage, percent, message);
+  };
+
+  try {
+    // 1. Load video buffer
+    await onProgress("analyze", 2, "Загрузка видеофайла...");
+    const buffer = await loadVideoBuffer(reel);
+
+    // 2. Detect scenes using PySceneDetect
+    await onProgress("processing", 5, "Детекция сцен в видео...");
+    const sceneDetection = await detectScenes(
+      buffer,
+      reelId,
+      threshold,
+      minSceneLen
+    );
+
+    const scenesCount = sceneDetection.total_scenes;
+    await onProgress(
+      "processing",
+      15,
+      `Обнаружено ${scenesCount} сцен, загрузка в Gemini...`
+    );
+
+    // If no scenes detected, treat entire video as one scene
+    const scenesToProcess: DetectedScene[] =
+      scenesCount === 0
+        ? [
+            {
+              index: 0,
+              start_time: 0,
+              end_time: sceneDetection.video_duration || 10,
+              duration: sceneDetection.video_duration || 10,
+              start_frame: 0,
+              end_frame: 0,
+              thumbnail_base64: null,
+            },
+          ]
+        : sceneDetection.scenes;
+
+    // 3. Upload video to Gemini
+    await onProgress("uploading", 20, "Загрузка видео в Gemini...");
+    const geminiService = getGeminiService();
+    const fileUri = await geminiService.uploadVideo(
+      buffer,
+      "video/mp4",
+      `${reelId}.mp4`,
+      onProgress
+    );
+
+    // 4. Prepare scene boundaries for Gemini
+    const sceneBoundaries: import("../gemini").SceneBoundary[] =
+      scenesToProcess.map((s) => ({
+        index: s.index,
+        startTime: s.start_time,
+        endTime: s.end_time,
+      }));
+
+    // 5. Single unified analysis with Gemini
+    await onProgress("analyzing", 50, "Unified анализ видео...");
+    const unifiedAnalysis = await geminiService.analyzeVideoUnified(
+      fileUri,
+      sceneBoundaries,
+      onProgress,
+      reelId
+    );
+
+    // 6. Generate remix options with ChatGPT
+    await onProgress("analyzing", 75, "Генерация вариантов замены...");
+    const elementsWithOptions = await mergeUnifiedElementsWithOptions(
+      unifiedAnalysis.elements,
+      reelId
+    );
+
+    // 7. Create VideoAnalysis record
+    const savedAnalysis = await prisma.videoAnalysis.create({
+      data: {
+        sourceType: "reel",
+        sourceId: reelId,
+        fileName: `${reelId}.mp4`,
+        analysisType: "scenes",
+        duration: sceneDetection.video_duration
+          ? Math.round(sceneDetection.video_duration)
+          : null,
+        aspectRatio: unifiedAnalysis.aspectRatio,
+        tags: unifiedAnalysis.tags,
+        elements: [], // Legacy field - use videoElements
+        hasScenes: true,
+        scenesCount: scenesToProcess.length,
+      },
+    });
+
+    // 8. Create VideoElement records
+    await onProgress("analyzing", 80, "Сохранение элементов...");
+    const elementIdMap = new Map<string, string>(); // oldId -> dbId
+
+    for (const element of elementsWithOptions) {
+      // Add sceneId to appearances
+      const appearancesWithSceneId = element.appearances.map((app) => {
+        const scene = scenesToProcess.find((s) => s.index === app.sceneIndex);
+        return {
+          sceneIndex: app.sceneIndex,
+          startTime: app.startTime,
+          endTime: app.endTime,
+          // sceneId will be added after creating scenes
+        };
+      });
+
+      const dbElement = await prisma.videoElement.create({
+        data: {
+          analysisId: savedAnalysis.id,
+          type: element.type,
+          label: element.label,
+          description: element.description,
+          remixOptions: element.remixOptions,
+          appearances: appearancesWithSceneId,
+        },
+      });
+      elementIdMap.set(element.id, dbElement.id);
+    }
+
+    // 9. Create VideoScene records with elementIds
+    await onProgress("analyzing", 85, "Сохранение сцен...");
+    const sceneIdMap = new Map<number, string>(); // sceneIndex -> dbSceneId
+
+    for (const scene of scenesToProcess) {
+      // Find elements that appear in this scene
+      const sceneElementIds = elementsWithOptions
+        .filter((el) =>
+          el.appearances.some((a) => a.sceneIndex === scene.index)
+        )
+        .map((el) => elementIdMap.get(el.id)!)
+        .filter(Boolean);
+
+      // Upload thumbnail if available
+      let thumbnailUrl: string | null = null;
+      let thumbnailS3Key: string | null = null;
+
+      if (scene.thumbnail_base64) {
+        const uploadResult = await uploadThumbnail(
+          scene.thumbnail_base64,
+          savedAnalysis.id,
+          scene.index
+        );
+        if (uploadResult) {
+          thumbnailUrl = uploadResult.url;
+          thumbnailS3Key = uploadResult.s3Key;
+        }
+      }
+
+      const dbScene = await prisma.videoScene.create({
+        data: {
+          analysisId: savedAnalysis.id,
+          index: scene.index,
+          startTime: scene.start_time,
+          endTime: scene.end_time,
+          duration: scene.duration,
+          thumbnailUrl,
+          thumbnailS3Key,
+          elements: [], // Legacy field
+          elementIds: sceneElementIds,
+          generationStatus: "none",
+        },
+      });
+
+      sceneIdMap.set(scene.index, dbScene.id);
+    }
+
+    // 10. Update VideoElement appearances with sceneId
+    for (const element of elementsWithOptions) {
+      const dbElementId = elementIdMap.get(element.id);
+      if (!dbElementId) continue;
+
+      const appearancesWithSceneId = element.appearances.map((app) => ({
+        sceneIndex: app.sceneIndex,
+        sceneId: sceneIdMap.get(app.sceneIndex) || "",
+        startTime: app.startTime,
+        endTime: app.endTime,
+      }));
+
+      await prisma.videoElement.update({
+        where: { id: dbElementId },
+        data: { appearances: appearancesWithSceneId },
+      });
+    }
+
+    await onProgress("analyze", 95, "Финализация...");
+
+    // 11. Fetch final analysis with elements and scenes
+    const finalAnalysis = await prisma.videoAnalysis.findUnique({
+      where: { id: savedAnalysis.id },
+      include: {
+        videoScenes: { orderBy: { index: "asc" } },
+        videoElements: true,
+      },
+    });
+
+    await onProgress("analyze", 100, "Unified анализ завершён");
+    await timer.stop("Video analyzed with unified approach", {
+      scenesCount: scenesToProcess.length,
+      elementsCount: elementsWithOptions.length,
+      tags: unifiedAnalysis.tags,
+    });
+
+    return finalAnalysis!;
+  } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    await callbacks.updateProgress(
+      reelId,
+      "analyze",
+      0,
+      `Ошибка: ${err.message}`
+    );
+    await timer.fail(err);
+    await callbacks.updateStatus(reelId, "failed", err.message);
+    throw err;
+  }
+}

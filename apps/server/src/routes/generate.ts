@@ -169,11 +169,44 @@ app.openapi(generateRoute, async (c) => {
 
     // If scene selections exist - use scene-based generation
     if (sceneSelections.length > 0) {
-      // Load scenes from DB
-      const scenes = await prisma.videoScene.findMany({
-        where: { analysisId: configData.analysisId },
-        orderBy: { index: "asc" },
-      });
+      // Load scenes and VideoElements from DB
+      const [scenes, videoElements] = await Promise.all([
+        prisma.videoScene.findMany({
+          where: { analysisId: configData.analysisId },
+          orderBy: { index: "asc" },
+        }),
+        prisma.videoElement.findMany({
+          where: { analysisId: configData.analysisId },
+        }),
+      ]);
+
+      // Helper to get elements for a specific scene
+      const getElementsForScene = (sceneIndex: number) => {
+        if (videoElements.length > 0) {
+          // Use new unified VideoElements with appearances
+          return videoElements
+            .filter((el) => {
+              const appearances = el.appearances as Array<{
+                sceneIndex: number;
+                startTime: number;
+                endTime: number;
+              }>;
+              return appearances.some((a) => a.sceneIndex === sceneIndex);
+            })
+            .map((el) => ({
+              id: el.id,
+              type: el.type,
+              label: el.label,
+              description: el.description,
+              remixOptions: el.remixOptions as Array<{
+                id: string;
+                label: string;
+                prompt: string;
+              }>,
+            }));
+        }
+        return null; // Fallback to legacy scene.elements
+      };
 
       // Build scene configs and start generation for each modified scene
       const sceneConfigs: Array<{
@@ -207,17 +240,23 @@ app.openapi(generateRoute, async (c) => {
             selection.elementSelections &&
             selection.elementSelections.length > 0
           ) {
-            const sceneElements = scene.elements as Array<{
-              id: string;
-              type: string;
-              label: string;
-              description: string;
-              remixOptions: Array<{
+            // Try to get unified VideoElements for this scene first
+            const unifiedElements = getElementsForScene(scene.index);
+
+            // Fallback to legacy scene.elements if no unified elements
+            const sceneElements =
+              unifiedElements ??
+              (scene.elements as Array<{
                 id: string;
+                type: string;
                 label: string;
-                prompt: string;
-              }>;
-            }>;
+                description: string;
+                remixOptions: Array<{
+                  id: string;
+                  label: string;
+                  prompt: string;
+                }>;
+              }>);
 
             const { prompt: builtPrompt, imageUrls } =
               buildPromptFromSelections(

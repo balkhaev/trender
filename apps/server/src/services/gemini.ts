@@ -119,6 +119,37 @@ export type VideoAnalysisWithoutOptions = {
   elements: ElementWithoutOptions[];
 };
 
+// Scene appearance for an element
+export type ElementAppearance = {
+  sceneIndex: number;
+  startTime: number;
+  endTime: number;
+};
+
+// Element with appearances (for unified analysis)
+export type ElementWithAppearances = {
+  id: string;
+  type: "character" | "object" | "background";
+  label: string;
+  description: string;
+  appearances: ElementAppearance[];
+};
+
+// Scene boundary from PySceneDetect
+export type SceneBoundary = {
+  index: number;
+  startTime: number;
+  endTime: number;
+};
+
+// Unified analysis result (elements with appearances)
+export type UnifiedVideoAnalysis = {
+  duration: number | null;
+  aspectRatio: string;
+  tags: string[];
+  elements: ElementWithAppearances[];
+};
+
 const ANALYSIS_PROMPT = `Identify key visual elements in this video for AI remix.
 
 Return JSON:
@@ -238,6 +269,58 @@ RULES:
 3. **elements**: Characters (char-1), Objects (obj-1), Backgrounds (bg-1)
 4. **NO remixOptions**
 5. Analyze ALL frames together`;
+
+// Промпт для unified анализа с привязкой к сценам
+const UNIFIED_ANALYSIS_PROMPT = `Analyze this video and identify unique visual elements. Track which scenes each element appears in.
+
+SCENE BOUNDARIES (detected automatically):
+{sceneBoundaries}
+
+Return JSON:
+{
+  "duration": 15,
+  "aspectRatio": "9:16",
+  "tags": ["lifestyle", "morning", "cozy"],
+  "elements": [
+    {
+      "id": "char-1",
+      "type": "character",
+      "label": "Young Woman",
+      "description": "Woman in late 20s, long dark wavy hair, cream linen dress",
+      "appearances": [
+        {"sceneIndex": 0, "startTime": 0, "endTime": 3.5},
+        {"sceneIndex": 2, "startTime": 7.2, "endTime": 10.0}
+      ]
+    },
+    {
+      "id": "obj-1",
+      "type": "object",
+      "label": "Coffee Cup",
+      "description": "Large ceramic mug, matte gray, steam rising",
+      "appearances": [
+        {"sceneIndex": 0, "startTime": 0, "endTime": 3.5}
+      ]
+    },
+    {
+      "id": "bg-1",
+      "type": "background",
+      "label": "Modern Kitchen",
+      "description": "Minimalist kitchen, white marble counters, morning sunlight",
+      "appearances": [
+        {"sceneIndex": 0, "startTime": 0, "endTime": 3.5},
+        {"sceneIndex": 1, "startTime": 3.5, "endTime": 7.2}
+      ]
+    }
+  ]
+}
+
+RULES:
+1. **UNIQUE ELEMENTS**: Each real-world entity = ONE element. Same person/object in multiple scenes = ONE element with multiple appearances.
+2. **appearances**: Array of scenes where this element is visible. Use ONLY sceneIndex values from SCENE BOUNDARIES above.
+3. **ELEMENT COUNT**: 3-6 elements total, ranked by visual importance.
+4. **NO remixOptions** - they will be generated separately.
+5. **description**: Specific visual details (materials, colors, clothing, features).
+6. **Match scene boundaries**: startTime/endTime must match the provided SCENE BOUNDARIES exactly.`;
 
 const FRAMES_ANALYSIS_PROMPT = `Identify key visual elements in these video frames for AI remix.
 
@@ -691,6 +774,116 @@ export class GeminiService {
 
     // Analyze extracted frames
     return this.analyzeFrames(data.frames, onProgress);
+  }
+
+  // ============================================
+  // UNIFIED АНАЛИЗ (элементы с привязкой к сценам)
+  // ============================================
+
+  /**
+   * Анализирует видео с учётом границ сцен
+   * Возвращает плоский список уникальных элементов с appearances (в каких сценах появляются)
+   */
+  async analyzeVideoUnified(
+    fileUri: string,
+    sceneBoundaries: SceneBoundary[],
+    onProgress?: GeminiProgressCallback,
+    reelId?: string
+  ): Promise<UnifiedVideoAnalysis> {
+    const logHandle = await aiLogger.startTimer({
+      provider: "gemini",
+      operation: "analyzeVideoUnified",
+      model: "gemini-2.0-flash",
+      reelId,
+    });
+
+    try {
+      await onProgress?.("analyzing", 55, "Запуск unified AI-анализа видео...");
+
+      const model = this.genAI.getGenerativeModel({
+        model: "gemini-2.0-flash",
+        safetySettings: SAFETY_SETTINGS,
+      });
+
+      // Формируем строку с границами сцен для промпта
+      const sceneBoundariesStr = sceneBoundaries
+        .map(
+          (s) =>
+            `Scene ${s.index}: ${s.startTime.toFixed(2)}s - ${s.endTime.toFixed(2)}s`
+        )
+        .join("\n");
+
+      const prompt = UNIFIED_ANALYSIS_PROMPT.replace(
+        "{sceneBoundaries}",
+        sceneBoundariesStr
+      );
+
+      const result = await withTimeout(
+        model.generateContent([
+          {
+            fileData: {
+              mimeType: "video/mp4",
+              fileUri,
+            },
+          },
+          { text: prompt },
+        ]),
+        timeouts.geminiApi,
+        "Gemini analyzeVideoUnified"
+      );
+
+      await onProgress?.("analyzing", 80, "Обработка результатов анализа...");
+
+      const response = result.response;
+      const text = extractTextFromResponse(response);
+
+      const jsonMatch = text.match(JSON_REGEX);
+      if (!jsonMatch) {
+        throw new Error("Failed to parse unified analysis response");
+      }
+
+      const raw = JSON.parse(jsonMatch[0]) as {
+        duration?: number | string | null;
+        aspectRatio?: string;
+        tags?: string[];
+        elements?: ElementWithAppearances[];
+      };
+
+      const duration =
+        typeof raw.duration === "string"
+          ? Number.parseInt(raw.duration, 10) || null
+          : (raw.duration ?? null);
+
+      // Ограничиваем до 6 элементов
+      let elements = raw.elements || [];
+      if (elements.length > 6) {
+        elements = elements.slice(0, 6);
+      }
+
+      await onProgress?.("analyzing", 90, "Unified анализ завершён");
+
+      const result2: UnifiedVideoAnalysis = {
+        duration,
+        aspectRatio: raw.aspectRatio || "9:16",
+        tags: raw.tags || [],
+        elements,
+      };
+
+      await logHandle.success({
+        inputMeta: { scenesCount: sceneBoundaries.length },
+        outputMeta: {
+          elementsCount: result2.elements.length,
+          tags: result2.tags,
+        },
+      });
+
+      return result2;
+    } catch (error) {
+      await logHandle.fail(
+        error instanceof Error ? error : new Error(String(error))
+      );
+      throw error;
+    }
   }
 
   // ============================================

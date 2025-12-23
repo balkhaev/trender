@@ -429,14 +429,14 @@ export function hasVideo(
 
 /**
  * Get video URL for a reel
- * Uses new /api/files/reels/:id endpoint for S3 files
+ * Uses new /api/files/reels/:id.mp4 endpoint for S3 files
  * Falls back to old /api/reels/downloads/:source/:id.mp4 for local files
  */
 export function getReelVideoUrl(
   reel: Pick<SavedReel, "id" | "s3Key" | "localPath" | "source">
 ): string | null {
   if (reel.s3Key) {
-    return `${API_URL}/api/files/reels/${reel.id}`;
+    return `${API_URL}/api/files/reels/${reel.id}.mp4`;
   }
   if (reel.localPath) {
     return `${API_URL}/api/reels/downloads/${reel.source}/${reel.id}.mp4`;

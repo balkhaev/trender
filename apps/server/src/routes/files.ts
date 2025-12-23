@@ -1,3 +1,6 @@
+import { createReadStream, existsSync } from "node:fs";
+import { stat } from "node:fs/promises";
+import { Readable } from "node:stream";
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import prisma from "@trender/db";
 import {
@@ -5,6 +8,7 @@ import {
   FileStreamSchema,
   NotFoundResponseSchema,
 } from "../schemas";
+import { getGenerationsPath } from "../services/queues/video-gen-queue";
 import { getS3Key, s3Service } from "../services/s3";
 
 const filesRouter = new OpenAPIHono();
@@ -15,12 +19,12 @@ const filesRouter = new OpenAPIHono();
 
 const streamReelRoute = createRoute({
   method: "get",
-  path: "/reels/{id}",
+  path: "/reels/{filename}",
   summary: "Stream reel video",
   tags: ["Files"],
   request: {
     params: z.object({
-      id: z.string().openapi({ param: { name: "id", in: "path" } }),
+      filename: z.string().openapi({ param: { name: "filename", in: "path" } }),
     }),
   },
   responses: {
@@ -45,12 +49,12 @@ const streamReelRoute = createRoute({
 
 const headReelRoute = createRoute({
   method: "head",
-  path: "/reels/{id}",
+  path: "/reels/{filename}",
   summary: "Check reel video existence",
   tags: ["Files"],
   request: {
     params: z.object({
-      id: z.string().openapi({ param: { name: "id", in: "path" } }),
+      filename: z.string().openapi({ param: { name: "filename", in: "path" } }),
     }),
   },
   responses: {
@@ -65,12 +69,12 @@ const headReelRoute = createRoute({
 
 const streamGenerationRoute = createRoute({
   method: "get",
-  path: "/generations/{id}",
+  path: "/generations/{filename}",
   summary: "Stream generated video",
   tags: ["Files"],
   request: {
     params: z.object({
-      id: z.string().openapi({ param: { name: "id", in: "path" } }),
+      filename: z.string().openapi({ param: { name: "filename", in: "path" } }),
     }),
   },
   responses: {
@@ -95,12 +99,12 @@ const streamGenerationRoute = createRoute({
 
 const headGenerationRoute = createRoute({
   method: "head",
-  path: "/generations/{id}",
+  path: "/generations/{filename}",
   summary: "Check generated video existence",
   tags: ["Files"],
   request: {
     params: z.object({
-      id: z.string().openapi({ param: { name: "id", in: "path" } }),
+      filename: z.string().openapi({ param: { name: "filename", in: "path" } }),
     }),
   },
   responses: {
@@ -167,8 +171,19 @@ const headReferenceRoute = createRoute({
 // ROUTE IMPLEMENTATIONS
 // ============================================
 
+/**
+ * Извлекает id из filename, убирая расширение
+ * "abc123.mp4" -> "abc123"
+ * "abc123" -> "abc123"
+ */
+function extractIdFromFilename(filename: string): string {
+  const dotIndex = filename.lastIndexOf(".");
+  return dotIndex > 0 ? filename.slice(0, dotIndex) : filename;
+}
+
 filesRouter.openapi(streamReelRoute, async (c) => {
-  const { id } = c.req.valid("param");
+  const { filename } = c.req.valid("param");
+  const id = extractIdFromFilename(filename);
 
   // Look up reel to get s3Key
   const reel = await prisma.reel.findUnique({
@@ -205,7 +220,8 @@ filesRouter.openapi(streamReelRoute, async (c) => {
 });
 
 filesRouter.openapi(headReelRoute, async (c) => {
-  const { id } = c.req.valid("param");
+  const { filename } = c.req.valid("param");
+  const id = extractIdFromFilename(filename);
 
   const reel = await prisma.reel.findUnique({
     where: { id },
@@ -235,7 +251,8 @@ filesRouter.openapi(headReelRoute, async (c) => {
 });
 
 filesRouter.openapi(streamGenerationRoute, async (c) => {
-  const { id } = c.req.valid("param");
+  const { filename } = c.req.valid("param");
+  const id = extractIdFromFilename(filename);
 
   // Look up generation to get s3Key
   const generation = await prisma.videoGeneration.findUnique({
@@ -279,7 +296,7 @@ filesRouter.openapi(streamGenerationRoute, async (c) => {
     try {
       const fileStat = await stat(localPath);
       const fileStream = createReadStream(localPath);
-      const webStream = Readable.toWeb(fileStream) as ReadableStream;
+      const webStream = Readable.toWeb(fileStream) as unknown as ReadableStream;
 
       return new Response(webStream, {
         headers: {
@@ -308,7 +325,8 @@ filesRouter.openapi(streamGenerationRoute, async (c) => {
 });
 
 filesRouter.openapi(headGenerationRoute, async (c) => {
-  const { id } = c.req.valid("param");
+  const { filename } = c.req.valid("param");
+  const id = extractIdFromFilename(filename);
 
   const generation = await prisma.videoGeneration.findUnique({
     where: { id },

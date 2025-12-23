@@ -16,11 +16,20 @@ model UserMedia {
   // Метаданные
   mimeType  String?  // MIME тип файла
 
+  // Источник и категория
+  source           String   @default("upload")  // "upload" | "generated"
+  category         String?  // "background" | "character" | "object" | "texture"
+  prompt           String?  // промпт генерации (для source="generated")
+  style            String?  // стиль генерации
+  generationParams Json?    // параметры генерации (aspectRatio, seed и т.д.)
+
   createdAt DateTime @default(now())
 
   @@index([userId])
   @@index([type])
   @@index([createdAt])
+  @@index([source])
+  @@index([category])
 }
 
 // Конфигурация генерации (Simple/Expert mode)
