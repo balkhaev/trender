@@ -358,11 +358,28 @@ export const ElementSelectionSchema = z
 
 export const SceneSelectionSchema = z
   .object({
-    sceneId: z.string(),
-    useOriginal: z.boolean(),
-    elementSelections: z.array(ElementSelectionSchema).optional(),
+    sceneId: z.string().openapi({
+      description: "ID сцены из analysis.scenes",
+    }),
+    useOriginal: z.boolean().openapi({
+      description:
+        "true = использовать оригинальный фрагмент без генерации, " +
+        "false = генерировать с промптом из elementSelections",
+    }),
+    elementSelections: z
+      .array(ElementSelectionSchema)
+      .optional()
+      .openapi({
+        description:
+          "Выборы элементов для ЭТОЙ сцены. Из них строится уникальный промпт для генерации этой сцены. " +
+          "elementId должен соответствовать элементам из scene.elements, а не глобальным elements",
+      }),
   })
-  .openapi("SceneSelection");
+  .openapi("SceneSelection", {
+    description:
+      "Конфигурация для одной сцены. Каждая сцена с useOriginal=false получает СВОЙ промпт, " +
+      "построенный из её elementSelections и элементов этой сцены (scene.elements)",
+  });
 
 export const SimpleConfigureRequestSchema = z
   .object({
