@@ -508,7 +508,7 @@ export const TraceSpanSchema = z.object({
   endedAt: z.string().nullable(),
   durationMs: z.number().nullable(),
   status: SpanStatusSchema,
-  attributes: z.record(z.any()).nullable(),
+  attributes: z.record(z.string(), z.any()).nullable(),
   events: z.array(z.any()).nullable(),
   parentSpanId: z.string().nullable(),
 });
@@ -523,7 +523,7 @@ export const TraceSchema = z.object({
   endedAt: z.string().nullable(),
   durationMs: z.number().nullable(),
   status: SpanStatusSchema,
-  metadata: z.record(z.any()).nullable(),
+  metadata: z.record(z.string(), z.any()).nullable(),
   spans: z.array(TraceSpanSchema).optional(),
 });
 export type Trace = z.infer<typeof TraceSchema>;
