@@ -593,16 +593,16 @@ export const ExpertConfigureRequestSchema = z
 
 export const GenerateRequestSchema = z
   .object({
-    configurationId: z.string().optional().openapi({
+    configuration_id: z.string().optional().openapi({
       description: "Config ID from Simple/Expert mode",
     }),
-    analysisId: z.string().optional().openapi({
+    analysis_id: z.string().optional().openapi({
       description: "Direct analysis ID (for quick generate)",
     }),
     prompt: z.string().optional().openapi({
       description: "Direct prompt (for quick generate)",
     }),
-    sceneSelections: z.array(SceneSelectionSchema).optional().openapi({
+    scene_selections: z.array(SceneSelectionSchema).optional().openapi({
       description: "Direct scene selections for scene-based generation",
     }),
     options: GenerationOptionsSchema.optional(),
