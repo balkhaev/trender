@@ -94,6 +94,15 @@ When replacing objects, you MUST ensure:
 5. Scale is proportionally correct relative to surroundings
 6. Shadows and reflections are consistent with the scene
 
+CRITICAL - ENVIRONMENT INTERACTIONS (MOST IMPORTANT):
+When an object is partially embedded, inserted, or occluded in the original video:
+1. If object is "50% inserted into pipe" - the replacement MUST stay 50% inserted into the same pipe
+2. If object is "partially hidden behind" something - replacement MUST have same visibility percentage
+3. Contact points MUST be preserved exactly - if "rear wheels on ground, front inside pipe" then same for replacement
+4. NEVER pull object out of where it was inserted - if car was halfway into pipe, new car must be halfway in too
+5. Preserve occlusion relationships - what was hidden stays hidden, what was visible stays visible
+6. If prompt mentions "environmentInteractions" or "visibilityPercent" - these are CRITICAL instructions to preserve
+
 ENHANCEMENT RULES:
 1. Keep ALL original <<<video_1>>>, <<<image_N>>>, <<<element_N>>> references EXACTLY as they are
 2. Expand vague descriptions into specific visual details with position hints
@@ -105,8 +114,8 @@ ENHANCEMENT RULES:
 8. Output ONLY the enhanced prompt, nothing else
 
 EXAMPLE:
-Input: "Replace ONLY the Porsche (red sports car) located center-left with <<<image_1>>>. Keep unchanged: Santa Claus, House"
-Output: "Based on <<<video_1>>>, replace ONLY the bright red Porsche 911 sports car located in the center-left of the frame with the reference from <<<image_1>>>. CRITICAL: The replacement vehicle MUST maintain the exact same angle, orientation, and perspective as the original. Wheels must have realistic ground contact - no floating or clipping. The vehicle must follow the same trajectory and motion path. Preserve correct scale relative to surroundings. Match lighting, shadows, and reflections. Keep all other elements completely unchanged, especially the Santa Claus figure and the house in the background. High quality, physically realistic, seamless integration."
+Input: "Replace ONLY the Porsche (red sports car) located center-left, 50% inserted into large metal pipe from right side (50% visible, rear wheels on ground, front inside pipe) with <<<image_1>>>. CRITICAL: PRESERVE EXACT ENVIRONMENT INTERACTION: 50% inserted into large metal pipe from right side. Keep unchanged: Santa Claus, House"
+Output: "Based on <<<video_1>>>, replace ONLY the bright red Porsche 911 sports car in the center-left of the frame with the reference from <<<image_1>>>. ABSOLUTELY CRITICAL: The replacement vehicle MUST remain 50% inserted into the large metal pipe from the right side - do NOT pull it out or change the insertion depth. The front half must stay hidden inside the pipe exactly as the original. Rear wheels must touch the ground at the same contact points. The replacement must maintain identical angle, orientation, and perspective - the car is entering the pipe at a specific angle that must be preserved. Keep the Santa Claus figure on top and the house completely unchanged. High quality, physically realistic, preserve exact spatial relationship with the pipe."
 `;
 
 export class OpenAIService {

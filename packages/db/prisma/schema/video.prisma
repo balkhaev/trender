@@ -157,6 +157,10 @@ model VideoScene {
   thumbnailUrl    String?       // URL of scene thumbnail
   thumbnailS3Key  String?       // S3 key of thumbnail
 
+  // Pre-trimmed scene video (saved after analysis to avoid re-trimming)
+  videoUrl        String?       // Public URL of trimmed scene video
+  videoS3Key      String?       // S3 key of trimmed scene video
+
   // Elements detected in this scene (legacy - use VideoElement.appearances instead)
   elements     Json @default("[]")  // [{id, type, label, description, remixOptions}]
 

@@ -147,26 +147,55 @@ export const sceneGenWorker = new Worker<SceneGenJobData, SceneGenJobResult>(
         data: { generationStatus: "processing" },
       });
 
-      await updateSceneProgress(job, {
-        stage: "analyzing" as any,
-        percent: 5,
-        message: "Обрезка видео до нужной сцены...",
+      // Check if scene has pre-trimmed video from analysis
+      const scene = await prisma.videoScene.findUnique({
+        where: { id: sceneId },
+        select: { videoUrl: true, videoS3Key: true },
       });
 
-      // 1. Trim video to scene range
-      const trimmedBuffer = await trimVideo(sourceVideoUrl, startTime, endTime);
+      let trimmedVideoUrl: string;
 
-      await updateSceneProgress(job, {
-        stage: "analyzing" as any,
-        percent: 15,
-        message: "Загрузка обрезанного видео...",
-      });
+      if (scene?.videoUrl) {
+        // Use pre-trimmed video from analysis
+        console.log(
+          `[SceneGenQueue] Using pre-trimmed video for scene: ${scene.videoUrl}`
+        );
+        trimmedVideoUrl = scene.videoUrl;
 
-      // 2. Upload trimmed video for Kling
-      const trimmedVideoUrl = await uploadTrimmedVideoForKling(
-        trimmedBuffer,
-        sceneGenerationId
-      );
+        await updateSceneProgress(job, {
+          stage: "analyzing" as any,
+          percent: 15,
+          message: "Используется сохраненная нарезка сцены...",
+        });
+      } else {
+        // Fallback: trim video on-the-fly (legacy behavior)
+        console.log(
+          "[SceneGenQueue] No pre-trimmed video, trimming on-the-fly..."
+        );
+
+        await updateSceneProgress(job, {
+          stage: "analyzing" as any,
+          percent: 5,
+          message: "Обрезка видео до нужной сцены...",
+        });
+
+        const trimmedBuffer = await trimVideo(
+          sourceVideoUrl,
+          startTime,
+          endTime
+        );
+
+        await updateSceneProgress(job, {
+          stage: "analyzing" as any,
+          percent: 15,
+          message: "Загрузка обрезанного видео...",
+        });
+
+        trimmedVideoUrl = await uploadTrimmedVideoForKling(
+          trimmedBuffer,
+          sceneGenerationId
+        );
+      }
 
       console.log(
         "[SceneGenQueue] Trimmed video URL for Kling:",
@@ -494,20 +523,39 @@ export const compositeGenWorker = new Worker<
 
       for (const config of sceneConfigs) {
         if (config.useOriginal) {
-          // Trim original video for this scene
-          const trimmedBuffer = await trimVideo(
-            sourceVideoUrl,
-            config.startTime,
-            config.endTime
-          );
+          // Check if scene has pre-trimmed video from analysis
+          const scene = await prisma.videoScene.findUnique({
+            where: { id: config.sceneId },
+            select: { videoUrl: true },
+          });
 
-          // Upload trimmed original
-          const s3Key = getS3Key(
-            "scene-original-trimmed",
-            `${compositeGenerationId}_${config.sceneIndex}`
-          );
-          await s3Service.uploadFile(s3Key, trimmedBuffer, "video/mp4");
-          const trimmedUrl = await getS3PublicUrl(s3Key);
+          let trimmedUrl: string;
+
+          if (scene?.videoUrl) {
+            // Use pre-trimmed video from analysis
+            console.log(
+              `[CompositeGenQueue] Using pre-trimmed video for original scene ${config.sceneIndex}: ${scene.videoUrl}`
+            );
+            trimmedUrl = scene.videoUrl;
+          } else {
+            // Fallback: trim original video on-the-fly
+            console.log(
+              `[CompositeGenQueue] No pre-trimmed video for scene ${config.sceneIndex}, trimming on-the-fly...`
+            );
+            const trimmedBuffer = await trimVideo(
+              sourceVideoUrl,
+              config.startTime,
+              config.endTime
+            );
+
+            // Upload trimmed original
+            const s3Key = getS3Key(
+              "scene-original-trimmed",
+              `${compositeGenerationId}_${config.sceneIndex}`
+            );
+            await s3Service.uploadFile(s3Key, trimmedBuffer, "video/mp4");
+            trimmedUrl = await getS3PublicUrl(s3Key);
+          }
 
           videoSegments.push({ url: trimmedUrl, order: config.sceneIndex });
         } else if (config.generationId) {

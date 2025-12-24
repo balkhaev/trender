@@ -152,14 +152,14 @@ export const FeedTemplateItemSchema = z
     title: z.string().nullable(),
     tags: z.array(z.string()),
     category: z.string().nullable(),
-    thumbnailUrl: z.string(),
-    previewVideoUrl: z.string().optional(),
-    generationCount: z.number(),
-    isBookmarked: z.boolean().optional(),
+    thumbnail_url: z.string(),
+    preview_video_url: z.string().optional(),
+    generation_count: z.number(),
+    is_bookmarked: z.boolean().optional(),
     reel: z.object({
       id: z.string(),
       author: z.string().nullable(),
-      likeCount: z.number().nullable(),
+      like_count: z.number().nullable(),
     }),
     elements: z.array(
       z.object({

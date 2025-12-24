@@ -13,6 +13,9 @@ import { getS3Key, isS3Configured, s3Service } from "../s3";
 import { getMediaPublicUrl } from "../url-builder";
 import { loadVideoBuffer } from "../video/video-loader";
 
+// Timeout constants for video processing
+const TRIM_TIMEOUT_MS = 180_000; // 3 minutes
+
 // Service URLs
 const VIDEO_FRAMES_SERVICE_URL = services.videoFrames;
 
@@ -200,6 +203,85 @@ async function uploadThumbnail(
     return { url, s3Key };
   } catch (error) {
     console.error(`Failed to upload thumbnail for scene ${sceneIndex}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Trim video to specific time range using video-frames service
+ */
+async function trimVideoBuffer(
+  sourceBuffer: Buffer,
+  startTime: number,
+  endTime: number
+): Promise<Buffer> {
+  const formData = new FormData();
+  formData.append(
+    "video",
+    new Blob([new Uint8Array(sourceBuffer)], { type: "video/mp4" }),
+    "source.mp4"
+  );
+  formData.append("start_time", startTime.toString());
+  formData.append("end_time", endTime.toString());
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), TRIM_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${VIDEO_FRAMES_SERVICE_URL}/trim`, {
+      method: "POST",
+      body: formData,
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to trim video: ${errorText}`);
+    }
+
+    const trimmedBuffer = await response.arrayBuffer();
+    return Buffer.from(trimmedBuffer);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Trim and save scene video to S3
+ * This avoids re-trimming during generation
+ */
+async function trimAndSaveSceneVideo(
+  sourceBuffer: Buffer,
+  analysisId: string,
+  sceneIndex: number,
+  startTime: number,
+  endTime: number
+): Promise<{ url: string; s3Key: string } | null> {
+  if (!isS3Configured()) {
+    return null;
+  }
+
+  try {
+    // Trim video to scene boundaries
+    const trimmedBuffer = await trimVideoBuffer(
+      sourceBuffer,
+      startTime,
+      endTime
+    );
+
+    // Upload to S3
+    const s3Key = getS3Key("scene-videos", `${analysisId}_scene_${sceneIndex}`);
+    await s3Service.uploadFile(s3Key, trimmedBuffer, "video/mp4");
+
+    // Get public URL for Kling access
+    const url = `${process.env.S3_ENDPOINT}/${process.env.S3_BUCKET}/${s3Key}`;
+
+    console.log(
+      `[SceneAnalysis] Scene ${sceneIndex} video saved to S3: ${s3Key}`
+    );
+    return { url, s3Key };
+  } catch (error) {
+    console.error(`Failed to trim/save scene ${sceneIndex} video:`, error);
     return null;
   }
 }
@@ -403,7 +485,7 @@ export async function analyzeReelWithScenes(
     const allElements: ElementWithOptions[] = [];
 
     for (let i = 0; i < scenesToProcess.length; i++) {
-      const scene = scenesToProcess[i];
+      const scene = scenesToProcess[i]!;
       const baseProgress = 15 + i * progressPerScene;
 
       await onProgress(
@@ -816,11 +898,19 @@ export async function analyzeReelUnified(
       elementIdMap.set(element.id, dbElement.id);
     }
 
-    // 9. Create VideoScene records with elementIds
-    await onProgress("analyzing", 85, "Сохранение сцен...");
+    // 9. Create VideoScene records with elementIds and pre-trimmed videos
+    await onProgress("analyzing", 85, "Сохранение сцен и нарезка видео...");
     const sceneIdMap = new Map<number, string>(); // sceneIndex -> dbSceneId
 
-    for (const scene of scenesToProcess) {
+    for (let i = 0; i < scenesToProcess.length; i++) {
+      const scene = scenesToProcess[i]!;
+      const sceneProgress = 85 + Math.floor((i / scenesToProcess.length) * 8);
+      await onProgress(
+        "analyzing",
+        sceneProgress,
+        `Нарезка сцены ${i + 1}/${scenesToProcess.length}...`
+      );
+
       // Find elements that appear in this scene
       const sceneElementIds = elementsWithOptions
         .filter((el) =>
@@ -845,6 +935,22 @@ export async function analyzeReelUnified(
         }
       }
 
+      // Trim and save scene video to avoid re-trimming during generation
+      let videoUrl: string | null = null;
+      let videoS3Key: string | null = null;
+
+      const videoResult = await trimAndSaveSceneVideo(
+        buffer,
+        savedAnalysis.id,
+        scene.index,
+        scene.start_time,
+        scene.end_time
+      );
+      if (videoResult) {
+        videoUrl = videoResult.url;
+        videoS3Key = videoResult.s3Key;
+      }
+
       const dbScene = await prisma.videoScene.create({
         data: {
           analysisId: savedAnalysis.id,
@@ -854,6 +960,8 @@ export async function analyzeReelUnified(
           duration: scene.duration,
           thumbnailUrl,
           thumbnailS3Key,
+          videoUrl,
+          videoS3Key,
           elements: [], // Legacy field
           elementIds: sceneElementIds,
           generationStatus: "none",

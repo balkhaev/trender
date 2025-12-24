@@ -509,16 +509,16 @@ templatesRouter.openapi(feedRoute, async (c) => {
         title: t.title,
         tags: t.tags,
         category: t.category,
-        thumbnailUrl: t.reel?.thumbnailUrl ?? "",
-        previewVideoUrl: t.reel
+        thumbnail_url: t.reel?.thumbnailUrl ?? "",
+        preview_video_url: t.reel
           ? (buildReelVideoUrl(t.reel) ?? undefined)
           : undefined,
-        generationCount: t.generationCount,
-        isBookmarked: t.bookmarks.length > 0,
+        generation_count: t.generationCount,
+        is_bookmarked: t.bookmarks.length > 0,
         reel: {
           id: t.reel?.id ?? "",
           author: t.reel?.author ?? null,
-          likeCount: t.reel?.likeCount ?? null,
+          like_count: t.reel?.likeCount ?? null,
         },
         elements: elements.slice(0, 5).map((el) => ({
           id: el.id,
@@ -784,16 +784,16 @@ templatesRouter.openapi(searchRoute, async (c) => {
         title: t.title,
         tags: t.tags,
         category: t.category,
-        thumbnailUrl: t.reel?.thumbnailUrl ?? "",
-        previewVideoUrl: t.reel
+        thumbnail_url: t.reel?.thumbnailUrl ?? "",
+        preview_video_url: t.reel
           ? (buildReelVideoUrl(t.reel) ?? undefined)
           : undefined,
-        generationCount: t.generationCount,
-        isBookmarked: t.bookmarks.length > 0,
+        generation_count: t.generationCount,
+        is_bookmarked: t.bookmarks.length > 0,
         reel: {
           id: t.reel?.id ?? "",
           author: t.reel?.author ?? null,
-          likeCount: t.reel?.likeCount ?? null,
+          like_count: t.reel?.likeCount ?? null,
         },
         elements: elements.slice(0, 5).map((el) => ({
           id: el.id,

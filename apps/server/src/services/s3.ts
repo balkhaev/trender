@@ -34,7 +34,13 @@ export type S3FileType =
   | "generations"
   | "thumbnails"
   | "references"
-  | "media";
+  | "media"
+  | "scene-videos"
+  | "scene-thumbnails"
+  | "scene-trimmed"
+  | "scene-generations"
+  | "scene-original-trimmed"
+  | "composite-generations";
 
 /**
  * Generate S3 key for a file

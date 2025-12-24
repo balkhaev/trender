@@ -12,6 +12,14 @@ export type Element = {
   position?: string;
   /** Уникальные черты для идентификации: "bright red color, low silhouette" */
   distinguishingFeatures?: string;
+  /** Взаимодействие с окружением: "50% inserted into pipe from right", "resting on table" */
+  environmentInteractions?: string;
+  /** Процент видимой части объекта: 50 = половина скрыта */
+  visibilityPercent?: number;
+  /** Точки контакта с поверхностями: "rear wheels on ground, front inside pipe" */
+  contactPoints?: string;
+  /** Что скрывает объект: "front half hidden by pipe, Santa on top" */
+  occlusionInfo?: string;
   remixOptions: Array<{ id: string; label: string; prompt: string }>;
 };
 
@@ -61,11 +69,62 @@ export function buildPromptFromSelections(
         const targetDesc = element.description
           ? `${element.label} (${element.description})`
           : element.label;
-        const positionHint = element.position
-          ? ` located ${element.position}`
-          : "";
 
-        let replacePrompt = `Replace ONLY the ${targetDesc}${positionHint} with the reference from <<<image_${imageIndex}>>>. CRITICAL: maintain exact position, scale, angle, orientation, and perspective. Preserve realistic physics - the replacement must interact naturally with the environment (ground, roads, surrounding objects). Match the original object's trajectory and movement`;
+        // Собираем контекст позиции и взаимодействия
+        const contextParts: string[] = [];
+        if (element.position) {
+          contextParts.push(`located ${element.position}`);
+        }
+        if (element.environmentInteractions) {
+          contextParts.push(element.environmentInteractions);
+        }
+        if (element.visibilityPercent !== undefined) {
+          contextParts.push(`${element.visibilityPercent}% visible`);
+        }
+        if (element.contactPoints) {
+          contextParts.push(`contact: ${element.contactPoints}`);
+        }
+
+        const contextHint =
+          contextParts.length > 0 ? ` (${contextParts.join(", ")})` : "";
+
+        // Строим промпт с акцентом на сохранение взаимодействий
+        let replacePrompt = `Replace ONLY the ${targetDesc}${contextHint} with the reference from <<<image_${imageIndex}>>>`;
+
+        // КРИТИЧЕСКИ ВАЖНО: инструкции по сохранению взаимодействий
+        const preserveInstructions: string[] = [];
+
+        if (element.environmentInteractions) {
+          preserveInstructions.push(
+            `PRESERVE EXACT ENVIRONMENT INTERACTION: ${element.environmentInteractions}`
+          );
+        }
+
+        if (element.visibilityPercent !== undefined) {
+          preserveInstructions.push(
+            `maintain ${element.visibilityPercent}% visibility (same occlusion as original)`
+          );
+        }
+
+        if (element.contactPoints) {
+          preserveInstructions.push(
+            `keep contact points: ${element.contactPoints}`
+          );
+        }
+
+        if (element.occlusionInfo) {
+          preserveInstructions.push(
+            `preserve occlusion: ${element.occlusionInfo}`
+          );
+        }
+
+        // Базовые инструкции физики
+        preserveInstructions.push(
+          "maintain exact position, scale, angle, orientation, perspective",
+          "replacement must have IDENTICAL spatial relationship with environment as original"
+        );
+
+        replacePrompt += `. CRITICAL: ${preserveInstructions.join(". ")}`;
 
         // Добавляем защиту других объектов
         if (unchangedLabels.length > 0) {
@@ -90,13 +149,15 @@ export function buildPromptFromSelections(
     }
   }
 
-  // Негативный промпт для защиты элементов и физики
+  // Негативный промпт для защиты элементов, физики и взаимодействий
   const physicsNegative =
     "floating objects, objects clipping through surfaces, unrealistic angles, wrong perspective, broken physics, objects going through walls or ground";
+  const interactionNegative =
+    "changing environment interactions, removing object embedding, exposing hidden parts, changing visibility percentage, breaking contact with surfaces, pulling object out of where it was inserted";
   const negativePrompt =
     unchangedLabels.length > 0
-      ? `modifying ${unchangedLabels.join(", ")}, changing unselected objects, altering protected elements, ${physicsNegative}`
-      : physicsNegative;
+      ? `modifying ${unchangedLabels.join(", ")}, changing unselected objects, altering protected elements, ${physicsNegative}, ${interactionNegative}`
+      : `${physicsNegative}, ${interactionNegative}`;
 
   return {
     prompt: parts.join(". "),
