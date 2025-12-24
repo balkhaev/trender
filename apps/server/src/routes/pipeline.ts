@@ -5,7 +5,12 @@ import prisma from "@trender/db";
 import { ErrorResponseSchema, NotFoundResponseSchema } from "../schemas";
 import { getDownloadsPath } from "../services/instagram/downloader";
 import { pipelineJobQueue } from "../services/queues";
-import { getS3Key, isS3Configured, s3Service } from "../services/s3";
+import {
+  getReelVideoUrl,
+  getS3Key,
+  isS3Configured,
+  s3Service,
+} from "../services/s3";
 
 const INSTAGRAM_URL_REGEX = /\/(?:reel|p)\/([a-zA-Z0-9_-]+)/;
 
@@ -315,6 +320,9 @@ const statusRoute = createRoute({
                 generationCount: z.number(),
               })
               .nullable(),
+            videoUrl: z.string().nullable().openapi({
+              description: "URL to the downloaded video file",
+            }),
             error: z.string().optional(),
           }),
         },
@@ -350,6 +358,9 @@ app.openapi(statusRoute, async (c) => {
     return c.json({ error: "Reel not found" }, 404);
   }
 
+  // Get video URL if file is downloaded
+  const videoUrl = getReelVideoUrl(reel);
+
   return c.json(
     {
       reelId: reel.id,
@@ -366,6 +377,7 @@ app.openapi(statusRoute, async (c) => {
             generationCount: reel.template.generationCount,
           }
         : null,
+      videoUrl,
       ...(reel.errorMessage ? { error: reel.errorMessage } : {}),
     },
     200
