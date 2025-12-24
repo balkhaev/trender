@@ -312,23 +312,23 @@ export type SimpleRemixDataResponse = z.infer<
 >;
 
 export const ElementSelectionSchema = z.object({
-  elementId: z.string(),
-  selectedOptionId: z.string().optional(),
-  customMediaId: z.string().optional(),
-  customMediaUrl: z.string().optional(),
+  element_id: z.string(),
+  selected_option_id: z.string().optional(),
+  custom_media_id: z.string().optional(),
+  custom_media_url: z.string().optional(),
 });
 export type ElementSelection = z.infer<typeof ElementSelectionSchema>;
 
 export const SceneSelectionSchema = z.object({
-  sceneId: z.string(),
-  useOriginal: z.boolean(),
-  elementSelections: z.array(ElementSelectionSchema).optional(),
+  scene_id: z.string(),
+  use_original: z.boolean(),
+  element_selections: z.array(ElementSelectionSchema).optional(),
 });
 export type SceneSelection = z.infer<typeof SceneSelectionSchema>;
 
 export const SimpleConfigureRequestSchema = z.object({
   selections: z.array(ElementSelectionSchema),
-  sceneSelections: z.array(SceneSelectionSchema).optional(),
+  scene_selections: z.array(SceneSelectionSchema).optional(),
 });
 export type SimpleConfigureRequest = z.infer<
   typeof SimpleConfigureRequestSchema
@@ -414,10 +414,10 @@ export type ExpertConfigureRequest = z.infer<
 // ===== GENERATE TYPES =====
 
 export const GenerateRequestSchema = z.object({
-  configurationId: z.string().optional(),
-  analysisId: z.string().optional(),
+  configuration_id: z.string().optional(),
+  analysis_id: z.string().optional(),
   prompt: z.string().optional(),
-  sceneSelections: z.array(SceneSelectionSchema).optional(),
+  scene_selections: z.array(SceneSelectionSchema).optional(),
   options: GenerationOptionsSchema.optional(),
 });
 export type GenerateRequest = z.infer<typeof GenerateRequestSchema>;

@@ -72,11 +72,11 @@ const generateRoute = createRoute({
 
 app.openapi(generateRoute, async (c) => {
   const {
-    configurationId,
-    analysisId,
+    configuration_id: configurationId,
+    analysis_id: analysisId,
     prompt,
     options,
-    sceneSelections: directSceneSelections,
+    scene_selections: directSceneSelections,
   } = c.req.valid("json");
 
   try {
@@ -172,18 +172,18 @@ app.openapi(generateRoute, async (c) => {
 
     // Check for scene-based generation
     type SceneSelection = {
-      sceneId: string;
-      useOriginal: boolean;
-      elementSelections?: Array<{
-        elementId: string;
-        selectedOptionId?: string;
-        customMediaUrl?: string;
+      scene_id: string;
+      use_original: boolean;
+      element_selections?: Array<{
+        element_id: string;
+        selected_option_id?: string;
+        custom_media_url?: string;
       }>;
     };
 
     let sceneSelections: SceneSelection[] = [];
 
-    // Сначала проверяем прямую передачу sceneSelections
+    // Сначала проверяем прямую передачу scene_selections
     if (directSceneSelections && directSceneSelections.length > 0) {
       sceneSelections = directSceneSelections;
     } else if (configurationId) {
@@ -254,10 +254,10 @@ app.openapi(generateRoute, async (c) => {
 
       // First pass: categorize scenes
       for (const selection of sceneSelections) {
-        const scene = scenes.find((s) => s.id === selection.sceneId);
+        const scene = scenes.find((s) => s.id === selection.scene_id);
         if (!scene) continue;
 
-        if (selection.useOriginal) {
+        if (selection.use_original) {
           originalScenes.push({
             sceneId: scene.id,
             sceneIndex: scene.index,
@@ -272,8 +272,8 @@ app.openapi(generateRoute, async (c) => {
           let sceneNegativePrompt: string | undefined;
 
           if (
-            selection.elementSelections &&
-            selection.elementSelections.length > 0
+            selection.element_selections &&
+            selection.element_selections.length > 0
           ) {
             const sceneElements = getElementsForScene(scene.index);
 
@@ -284,7 +284,7 @@ app.openapi(generateRoute, async (c) => {
                 negativePrompt: builtNegativePrompt,
               } = buildPromptFromSelections(
                 sceneElements,
-                selection.elementSelections
+                selection.element_selections
               );
 
               if (builtPrompt) {

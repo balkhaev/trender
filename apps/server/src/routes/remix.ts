@@ -220,39 +220,25 @@ app.openapi(simpleConfigureRoute, async (c) => {
     return c.json({ error: "Analysis not found" }, 404);
   }
 
-  // Transform snake_case selections to camelCase for buildPromptFromSelections
-  const selections = rawSelections.map(
-    (s: {
-      element_id: string;
-      selected_option_id?: string;
-      custom_media_id?: string;
-      custom_media_url?: string;
-    }) => ({
-      elementId: s.element_id,
-      selectedOptionId: s.selected_option_id,
-      customMediaUrl: s.custom_media_url,
-    })
-  );
+  // Use selections as-is (snake_case format)
+  const selections = rawSelections as Array<{
+    element_id: string;
+    selected_option_id?: string;
+    custom_media_id?: string;
+    custom_media_url?: string;
+  }>;
 
-  const sceneSelections = rawSceneSelections?.map(
-    (s: {
-      scene_id: string;
-      use_original: boolean;
-      element_selections?: Array<{
-        element_id: string;
-        selected_option_id?: string;
-        custom_media_url?: string;
-      }>;
-    }) => ({
-      sceneId: s.scene_id,
-      useOriginal: s.use_original,
-      elementSelections: s.element_selections?.map((es) => ({
-        elementId: es.element_id,
-        selectedOptionId: es.selected_option_id,
-        customMediaUrl: es.custom_media_url,
-      })),
-    })
-  );
+  const sceneSelections = rawSceneSelections as
+    | Array<{
+        scene_id: string;
+        use_original: boolean;
+        element_selections?: Array<{
+          element_id: string;
+          selected_option_id?: string;
+          custom_media_url?: string;
+        }>;
+      }>
+    | undefined;
 
   const elements = analysis.elements as Array<{
     id: string;
@@ -271,8 +257,7 @@ app.openapi(simpleConfigureRoute, async (c) => {
 
   // Estimate credits (5 per generation)
   const estimatedCredits = sceneSelections
-    ? sceneSelections.filter((s: { useOriginal: boolean }) => !s.useOriginal)
-        .length * 5
+    ? sceneSelections.filter((s) => !s.use_original).length * 5
     : 5;
 
   // Create configuration with referenceImages for Kling image_list
@@ -500,16 +485,12 @@ app.openapi(expertConfigureRoute, async (c) => {
     return c.json({ error: "Analysis not found" }, 404);
   }
 
-  // Transform snake_case scene_prompts to camelCase
-  const scenePrompts = rawScenePrompts?.map(
-    (s: { scene_id: string; prompt: string; use_original: boolean }) => ({
-      sceneId: s.scene_id,
-      prompt: s.prompt,
-      useOriginal: s.use_original,
-    })
-  );
+  // Use scene_prompts as-is (snake_case format)
+  const scenePrompts = rawScenePrompts as
+    | Array<{ scene_id: string; prompt: string; use_original: boolean }>
+    | undefined;
 
-  // Transform snake_case options to camelCase
+  // Transform snake_case options to camelCase for internal use
   const options = rawOptions
     ? {
         duration: rawOptions.duration,
@@ -520,8 +501,7 @@ app.openapi(expertConfigureRoute, async (c) => {
 
   // Estimate credits
   const estimatedCredits = scenePrompts
-    ? scenePrompts.filter((s: { useOriginal: boolean }) => !s.useOriginal)
-        .length * 5
+    ? scenePrompts.filter((s) => !s.use_original).length * 5
     : 5;
 
   // Create configuration

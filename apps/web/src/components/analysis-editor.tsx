@@ -8,7 +8,6 @@ import {
   Film,
   Save,
   Settings2,
-  Sparkles,
   Users,
 } from "lucide-react";
 import { useCallback, useState } from "react";
@@ -49,22 +48,6 @@ type QuickField = {
 
 const QUICK_FIELDS: QuickField[] = [
   {
-    key: "style",
-    label: "Стиль",
-    icon: Film,
-    type: "select",
-    options: [
-      { value: "cinematic", label: "Кинематографичный" },
-      { value: "documentary", label: "Документальный" },
-      { value: "commercial", label: "Рекламный" },
-      { value: "music video", label: "Музыкальный клип" },
-      { value: "social media", label: "Соц. сети" },
-      { value: "vlog", label: "Влог" },
-      { value: "tutorial", label: "Туториал" },
-      { value: "artistic", label: "Арт" },
-    ],
-  },
-  {
     key: "aspectRatio",
     label: "Формат",
     icon: Settings2,
@@ -77,11 +60,11 @@ const QUICK_FIELDS: QuickField[] = [
     ],
   },
   {
-    key: "klingPrompt",
-    label: "Промпт Kling",
-    icon: Sparkles,
-    type: "textarea",
-    placeholder: "Промпт для video-to-video генерации",
+    key: "duration",
+    label: "Длительность",
+    icon: Film,
+    type: "number",
+    placeholder: "Длительность в секундах",
   },
 ];
 

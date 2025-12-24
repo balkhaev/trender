@@ -91,8 +91,6 @@ export type TemplateAnalysis = {
   createdAt?: string;
   duration: number | null;
   aspectRatio: string;
-  style?: string;
-  klingPrompt?: string;
   tags?: string[];
   // Legacy elements JSON (for standard/frames analysis)
   elements?: LegacyElement[];
@@ -790,15 +788,15 @@ export async function removeBookmark(
 // ===== Scene-based Generation API =====
 
 /**
- * Тип для передачи на бэкенд
+ * Тип для передачи на бэкенд (snake_case)
  */
 export type SceneSelection = {
-  sceneId: string;
-  useOriginal: boolean;
-  elementSelections?: {
-    elementId: string;
-    selectedOptionId?: string;
-    customMediaUrl?: string;
+  scene_id: string;
+  use_original: boolean;
+  element_selections?: {
+    element_id: string;
+    selected_option_id?: string;
+    custom_media_url?: string;
   }[];
 };
 
@@ -843,7 +841,11 @@ export async function generateWithScenes(
   const response = await fetch(`${API_URL}/api/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ analysisId, sceneSelections, options }),
+    body: JSON.stringify({
+      analysis_id: analysisId,
+      scene_selections: sceneSelections,
+      options,
+    }),
     credentials: "include",
   });
 
