@@ -115,7 +115,7 @@ function GenerationsSection({
 
 function GenerationRow({ gen }: { gen: VideoGeneration }) {
   const [expanded, setExpanded] = useState(false);
-  const href = gen.video_url;
+  const href = gen.videoUrl;
   const variant = getGenerationBadgeVariant(gen.status);
 
   return (
@@ -160,13 +160,13 @@ function GenerationRow({ gen }: { gen: VideoGeneration }) {
             </div>
           ) : null}
 
-          {gen.image_references?.length > 0 ? (
+          {gen.imageReferences?.length > 0 ? (
             <div>
               <h5 className="mb-1 font-medium text-sm">
-                Images ({gen.image_references.length})
+                Images ({gen.imageReferences.length})
               </h5>
               <div className="flex flex-wrap gap-2">
-                {gen.image_references.map((url) => (
+                {gen.imageReferences.map((url) => (
                   <a
                     className="block"
                     href={url}
@@ -185,11 +185,11 @@ function GenerationRow({ gen }: { gen: VideoGeneration }) {
             </div>
           ) : null}
 
-          {gen.remix_source ? (
+          {gen.remixSource ? (
             <div className="text-sm">
               <span className="text-muted-foreground">Remix source:</span>{" "}
               <code className="rounded bg-muted px-1 font-mono text-xs">
-                {gen.remix_source}
+                {gen.remixSource}
               </code>
             </div>
           ) : null}
@@ -198,37 +198,37 @@ function GenerationRow({ gen }: { gen: VideoGeneration }) {
             <div>
               <span className="text-muted-foreground">Progress:</span>{" "}
               <span className="font-medium">{gen.progress}%</span>
-              {gen.kling_progress !== undefined ? (
+              {gen.klingProgress !== undefined ? (
                 <span className="text-muted-foreground">
                   {" "}
-                  (kling: {gen.kling_progress}%)
+                  (kling: {gen.klingProgress}%)
                 </span>
               ) : null}
             </div>
             <div>
               <span className="text-muted-foreground">Stage:</span>{" "}
-              <span className="font-medium">{gen.progress_stage}</span>
+              <span className="font-medium">{gen.progressStage}</span>
             </div>
             <div>
               <span className="text-muted-foreground">Создано:</span>{" "}
               <span className="font-medium">
-                {new Date(gen.created_at).toLocaleString("ru-RU")}
+                {new Date(gen.createdAt).toLocaleString("ru-RU")}
               </span>
             </div>
             <div>
               <span className="text-muted-foreground">Завершено:</span>{" "}
               <span className="font-medium">
-                {gen.completed_at
-                  ? new Date(gen.completed_at).toLocaleString("ru-RU")
+                {gen.completedAt
+                  ? new Date(gen.completedAt).toLocaleString("ru-RU")
                   : "—"}
               </span>
             </div>
           </div>
 
-          {gen.progress_message ? (
+          {gen.progressMessage ? (
             <div className="text-sm">
               <span className="text-muted-foreground">Message:</span>{" "}
-              {gen.progress_message}
+              {gen.progressMessage}
             </div>
           ) : null}
 
@@ -713,7 +713,7 @@ export function ReelDebugPanel({ reelId, onClose }: ReelDebugPanelProps) {
             <TabsTrigger value="overview">Обзор</TabsTrigger>
             <TabsTrigger value="logs">Логи ({data.logs.length})</TabsTrigger>
             <TabsTrigger value="ai-logs">
-              AI Logs ({data.ai_logs?.length ?? 0})
+              AI Logs ({data.aiLogs?.length ?? 0})
             </TabsTrigger>
             <TabsTrigger value="stats">Статистика</TabsTrigger>
           </TabsList>
@@ -742,14 +742,14 @@ export function ReelDebugPanel({ reelId, onClose }: ReelDebugPanelProps) {
 
           <TabsContent value="stats">
             <StatsTab
-              recentErrors={data.recent_errors}
-              stageStats={data.stage_stats}
+              recentErrors={data.recentErrors}
+              stageStats={data.stageStats}
             />
           </TabsContent>
 
           <TabsContent value="ai-logs">
             <AILogsTab
-              aiLogs={data.ai_logs ?? []}
+              aiLogs={data.aiLogs ?? []}
               expandedLogs={expandedLogs}
               onToggle={toggleLogExpand}
             />

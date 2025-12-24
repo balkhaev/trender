@@ -38,14 +38,6 @@ export const ReelListQuerySchema = z.object({
 });
 export type ReelListQuery = z.infer<typeof ReelListQuerySchema>;
 
-// ===== PAGINATION TYPES =====
-
-export const PaginationParamsSchema = z.object({
-  limit: z.number().int().min(1).max(100).default(20),
-  offset: z.number().int().min(0).default(0),
-});
-export type PaginationParams = z.infer<typeof PaginationParamsSchema>;
-
 // ===== ANALYSIS DETAIL TYPES =====
 
 export const VideoAnalysisSchema = z.object({
@@ -455,16 +447,8 @@ export const TagTrendSchema = z.object({
 export type TagTrend = z.infer<typeof TagTrendSchema>;
 
 export const TagTrendsResponseSchema = z.object({
-  window_hours: z.number(),
-  videos_analyzed: z.number(),
+  windowHours: z.number(),
+  videosAnalyzed: z.number(),
   tags: z.array(TagTrendSchema),
 });
 export type TagTrendsResponse = z.infer<typeof TagTrendsResponseSchema>;
-
-// ===== COMMON RESPONSE TYPES =====
-
-export const SuccessResponseSchema = z.object({
-  success: z.literal(true),
-  message: z.string().optional(),
-});
-export type SuccessResponse = z.infer<typeof SuccessResponseSchema>;
