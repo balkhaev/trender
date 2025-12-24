@@ -790,7 +790,7 @@ const regenerateSceneRoute = createRoute({
   summary: "Regenerate a specific scene",
   tags: ["Generate"],
   description:
-    "Start regeneration of a specific scene with optional new prompt.",
+    "Start regeneration of a specific scene with optional new prompt. Can auto-composite with other scenes.",
   request: {
     params: z.object({
       sceneId: z.string().openapi({ description: "Scene ID" }),
@@ -806,6 +806,10 @@ const regenerateSceneRoute = createRoute({
             duration: z.union([z.literal(5), z.literal(10)]).optional(),
             aspectRatio: z.enum(["16:9", "9:16", "1:1", "auto"]).optional(),
             keepAudio: z.boolean().optional(),
+            autoComposite: z.boolean().optional().default(true).openapi({
+              description:
+                "Automatically create composite generation with all scenes after this scene completes. Default: true",
+            }),
           }),
         },
       },
@@ -818,6 +822,7 @@ const regenerateSceneRoute = createRoute({
           schema: z.object({
             success: z.boolean(),
             sceneGenerationId: z.string(),
+            compositeGenerationId: z.string().optional(),
             status: z.string(),
           }),
         },
@@ -845,9 +850,10 @@ const regenerateSceneRoute = createRoute({
 
 app.openapi(regenerateSceneRoute, async (c) => {
   const { sceneId } = c.req.valid("param");
-  const { prompt, duration, aspectRatio, keepAudio } = c.req.valid("json");
+  const { prompt, duration, aspectRatio, keepAudio, autoComposite } =
+    c.req.valid("json");
 
-  // Get the scene with analysis and reel
+  // Get the scene with analysis, reel, and all sibling scenes
   const scene = await prisma.videoScene.findUnique({
     where: { id: sceneId },
     include: {
@@ -856,6 +862,16 @@ app.openapi(regenerateSceneRoute, async (c) => {
           template: {
             include: {
               reel: true,
+            },
+          },
+          videoScenes: {
+            orderBy: { index: "asc" },
+            include: {
+              generations: {
+                where: { status: "completed" },
+                orderBy: { createdAt: "desc" },
+                take: 1,
+              },
             },
           },
         },
@@ -901,10 +917,63 @@ app.openapi(regenerateSceneRoute, async (c) => {
     }
   );
 
+  let compositeGenerationId: string | undefined;
+
+  // Auto-composite: create composite generation with all scenes
+  if (autoComposite !== false) {
+    const allScenes = scene.analysis.videoScenes;
+
+    // Build scene configs for composite
+    const sceneConfigs = allScenes.map((s) => {
+      const isTargetScene = s.id === sceneId;
+      const hasCompletedGeneration = s.generations.length > 0;
+
+      if (isTargetScene) {
+        // This scene will use the new generation (wait for it)
+        return {
+          sceneId: s.id,
+          sceneIndex: s.index,
+          useOriginal: false,
+          generationId: sceneGenerationId, // Will wait for this generation
+          startTime: s.startTime,
+          endTime: s.endTime,
+        };
+      }
+      if (hasCompletedGeneration) {
+        // Use the latest completed generation
+        const latestGeneration = s.generations[0]!;
+        return {
+          sceneId: s.id,
+          sceneIndex: s.index,
+          useOriginal: false,
+          generationId: latestGeneration.id,
+          startTime: s.startTime,
+          endTime: s.endTime,
+        };
+      }
+      // Use original video for this scene
+      return {
+        sceneId: s.id,
+        sceneIndex: s.index,
+        useOriginal: true,
+        startTime: s.startTime,
+        endTime: s.endTime,
+      };
+    });
+
+    // Start composite generation
+    compositeGenerationId = await sceneGenJobQueue.startCompositeGeneration(
+      scene.analysis.id,
+      sourceVideoUrl,
+      sceneConfigs
+    );
+  }
+
   return c.json(
     {
       success: true,
       sceneGenerationId,
+      compositeGenerationId,
       status: "queued",
     },
     202

@@ -731,6 +731,8 @@ export default function ReelDetailPage() {
                         <CompositeGenerationCard
                           generation={gen}
                           key={gen.id}
+                          onRegenerateScene={regenerateSceneMutation}
+                          sceneGenerations={data.sceneGenerations}
                         />
                       ))}
                     </div>
@@ -1150,8 +1152,12 @@ function GenerationActions({
 
 function CompositeGenerationCard({
   generation,
+  sceneGenerations,
+  onRegenerateScene,
 }: {
   generation: CompositeGeneration;
+  sceneGenerations?: SceneGeneration[];
+  onRegenerateScene?: (sceneId: string) => void;
 }) {
   const isActive =
     generation.status === "pending" ||
@@ -1204,11 +1210,19 @@ function CompositeGenerationCard({
 
   const status = statusConfig[generation.status] || statusConfig.pending;
 
+  // Get scene generations for this composite
+  const sceneConfigs = generation.sceneConfig || [];
+  const getSceneGeneration = (generationId?: string) =>
+    sceneGenerations?.find((sg) => sg.id === generationId);
+
   return (
     <div className="overflow-hidden rounded-xl border border-glass-border bg-card shadow-(--shadow-glass) backdrop-blur-xl">
       <div className="flex items-center justify-between border-glass-border border-b bg-surface-2 px-4 py-2">
         <div className="flex items-center gap-2">
           <Badge variant="default">COMPOSITE</Badge>
+          <Badge className="text-xs" variant="outline">
+            {sceneConfigs.length} сцен
+          </Badge>
           <span
             className={`rounded-full border px-2 py-0.5 text-xs ${status.className}`}
           >
@@ -1240,6 +1254,70 @@ function CompositeGenerationCard({
               muted
               src={generation.videoUrl}
             />
+          </div>
+        )}
+
+        {/* Scene breakdown */}
+        {sceneConfigs.length > 0 && (
+          <div className="mb-3">
+            <p className="mb-2 font-medium text-muted-foreground text-xs">
+              Сцены:
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {sceneConfigs.map((config) => {
+                const sceneGen = getSceneGeneration(config.generationId);
+                const sceneStatus = config.useOriginal
+                  ? "original"
+                  : sceneGen?.status || "pending";
+
+                return (
+                  <div
+                    className="group relative flex items-center gap-1.5 rounded-lg border border-glass-border bg-surface-1 px-2 py-1"
+                    key={config.sceneId}
+                  >
+                    <span className="font-medium text-xs">
+                      #{config.sceneIndex + 1}
+                    </span>
+                    <span className="text-muted-foreground text-xs">
+                      {config.startTime.toFixed(1)}s-{config.endTime.toFixed(1)}
+                      s
+                    </span>
+                    <Badge
+                      className="text-xs"
+                      variant={
+                        sceneStatus === "completed" ||
+                        sceneStatus === "original"
+                          ? "default"
+                          : sceneStatus === "failed"
+                            ? "destructive"
+                            : "secondary"
+                      }
+                    >
+                      {config.useOriginal
+                        ? "Оригинал"
+                        : sceneStatus === "completed"
+                          ? "Готово"
+                          : sceneStatus === "processing"
+                            ? "..."
+                            : sceneStatus === "failed"
+                              ? "Ошибка"
+                              : "Ожидание"}
+                    </Badge>
+                    {onRegenerateScene && !config.useOriginal && (
+                      <Button
+                        className="ml-1 h-5 w-5 p-0 opacity-0 transition-opacity group-hover:opacity-100"
+                        onClick={() => onRegenerateScene(config.sceneId)}
+                        size="sm"
+                        title="Перегенерировать сцену"
+                        variant="ghost"
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 

@@ -169,10 +169,20 @@ export type SceneGeneration = {
   };
 };
 
+export type SceneConfig = {
+  sceneId: string;
+  sceneIndex: number;
+  useOriginal: boolean;
+  generationId?: string;
+  startTime: number;
+  endTime: number;
+};
+
 export type CompositeGeneration = {
   id: string;
   analysisId: string;
   status: string;
+  sceneConfig: SceneConfig[];
   videoUrl: string | null;
   s3Key: string | null;
   error: string | null;
@@ -887,8 +897,14 @@ export async function regenerateScene(
     duration?: 5 | 10;
     aspectRatio?: "16:9" | "9:16" | "1:1" | "auto";
     keepAudio?: boolean;
+    autoComposite?: boolean;
   }
-): Promise<{ success: boolean; sceneGenerationId: string; status: string }> {
+): Promise<{
+  success: boolean;
+  sceneGenerationId: string;
+  compositeGenerationId?: string;
+  status: string;
+}> {
   const response = await fetch(
     `${API_URL}/api/generate/scene/${sceneId}/regenerate`,
     {
