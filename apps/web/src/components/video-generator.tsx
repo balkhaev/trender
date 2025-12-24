@@ -97,12 +97,31 @@ export function VideoGenerator({
     }
   }, [analysis]);
 
-  // Collect all elements from videoElements
+  // Collect all elements from videoElements or fallback to videoScenes
   const allElements = useMemo(() => {
     if (!analysis) return [];
 
+    // Prefer videoElements if populated
     if (analysis.videoElements && analysis.videoElements.length > 0) {
       return analysis.videoElements;
+    }
+
+    // Fallback: extract unique elements from videoScenes
+    if (analysis.videoScenes && analysis.videoScenes.length > 0) {
+      const elementMap = new Map<
+        string,
+        (typeof analysis.videoScenes)[0]["elements"][0]
+      >();
+      for (const scene of analysis.videoScenes) {
+        if (scene.elements) {
+          for (const element of scene.elements) {
+            if (!elementMap.has(element.id)) {
+              elementMap.set(element.id, element);
+            }
+          }
+        }
+      }
+      return Array.from(elementMap.values());
     }
 
     return [];
