@@ -810,6 +810,14 @@ const regenerateSceneRoute = createRoute({
               description:
                 "Automatically create composite generation with all scenes after this scene completes. Default: true",
             }),
+            useGeneratedAsSource: z
+              .boolean()
+              .optional()
+              .default(false)
+              .openapi({
+                description:
+                  "Use the previously generated video as source instead of the original scene. Default: false (use original)",
+              }),
           }),
         },
       },
@@ -850,8 +858,14 @@ const regenerateSceneRoute = createRoute({
 
 app.openapi(regenerateSceneRoute, async (c) => {
   const { sceneId } = c.req.valid("param");
-  const { prompt, duration, aspectRatio, keepAudio, autoComposite } =
-    c.req.valid("json");
+  const {
+    prompt,
+    duration,
+    aspectRatio,
+    keepAudio,
+    autoComposite,
+    useGeneratedAsSource,
+  } = c.req.valid("json");
 
   // Get the scene with analysis, reel, and all sibling scenes
   const scene = await prisma.videoScene.findUnique({
@@ -877,6 +891,7 @@ app.openapi(regenerateSceneRoute, async (c) => {
         },
       },
       generations: {
+        where: { status: "completed" },
         orderBy: { createdAt: "desc" },
         take: 1,
       },
@@ -893,13 +908,25 @@ app.openapi(regenerateSceneRoute, async (c) => {
     return c.json({ error: "Source video not found" }, 400);
   }
 
-  const sourceVideoUrl = buildReelVideoUrl(reel);
-  if (!sourceVideoUrl) {
+  const originalVideoUrl = buildReelVideoUrl(reel);
+  if (!originalVideoUrl) {
     return c.json({ error: "Source video URL not available" }, 400);
   }
 
-  // Use provided prompt or fallback to last generation's prompt
+  // Use generated video as source if requested and available
   const lastGeneration = scene.generations[0];
+  let sourceVideoUrl = originalVideoUrl;
+
+  if (useGeneratedAsSource && lastGeneration?.videoUrl) {
+    sourceVideoUrl = lastGeneration.videoUrl;
+  } else if (useGeneratedAsSource && !lastGeneration?.videoUrl) {
+    return c.json(
+      { error: "No completed generation available to use as source" },
+      400
+    );
+  }
+
+  // Use provided prompt or fallback to last generation's prompt
   const finalPrompt =
     prompt || lastGeneration?.prompt || "Transform this scene";
 

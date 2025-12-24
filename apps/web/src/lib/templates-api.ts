@@ -898,6 +898,7 @@ export async function regenerateScene(
     aspectRatio?: "16:9" | "9:16" | "1:1" | "auto";
     keepAudio?: boolean;
     autoComposite?: boolean;
+    useGeneratedAsSource?: boolean;
   }
 ): Promise<{
   success: boolean;

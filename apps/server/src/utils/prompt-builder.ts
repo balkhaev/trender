@@ -65,7 +65,7 @@ export function buildPromptFromSelections(
           ? ` located ${element.position}`
           : "";
 
-        let replacePrompt = `Replace ONLY the ${targetDesc}${positionHint} with the reference from <<<image_${imageIndex}>>>, maintaining exact position and scale`;
+        let replacePrompt = `Replace ONLY the ${targetDesc}${positionHint} with the reference from <<<image_${imageIndex}>>>. CRITICAL: maintain exact position, scale, angle, orientation, and perspective. Preserve realistic physics - the replacement must interact naturally with the environment (ground, roads, surrounding objects). Match the original object's trajectory and movement`;
 
         // Добавляем защиту других объектов
         if (unchangedLabels.length > 0) {
@@ -90,11 +90,13 @@ export function buildPromptFromSelections(
     }
   }
 
-  // Негативный промпт для дополнительной защиты не выбранных элементов
+  // Негативный промпт для защиты элементов и физики
+  const physicsNegative =
+    "floating objects, objects clipping through surfaces, unrealistic angles, wrong perspective, broken physics, objects going through walls or ground";
   const negativePrompt =
     unchangedLabels.length > 0
-      ? `modifying ${unchangedLabels.join(", ")}, changing unselected objects, altering protected elements`
-      : undefined;
+      ? `modifying ${unchangedLabels.join(", ")}, changing unselected objects, altering protected elements, ${physicsNegative}`
+      : physicsNegative;
 
   return {
     prompt: parts.join(". "),

@@ -216,9 +216,17 @@ export default function ReelDetailPage() {
 
   const { mutate: regenerateSceneMutation, isPending: isRegeneratingScene } =
     useMutation({
-      mutationFn: ({ sceneId, prompt }: { sceneId: string; prompt?: string }) =>
+      mutationFn: ({
+        sceneId,
+        prompt,
+        useGeneratedAsSource,
+      }: {
+        sceneId: string;
+        prompt?: string;
+        useGeneratedAsSource?: boolean;
+      }) =>
         import("@/lib/templates-api").then((m) =>
-          m.regenerateScene(sceneId, { prompt })
+          m.regenerateScene(sceneId, { prompt, useGeneratedAsSource })
         ),
       onSuccess: () => {
         toast.success("Перегенерация сцены запущена");
@@ -1139,13 +1147,19 @@ function CompositeGenerationCard({
 }: {
   generation: CompositeGeneration;
   sceneGenerations?: SceneGeneration[];
-  onRegenerateScene?: (params: { sceneId: string; prompt?: string }) => void;
+  onRegenerateScene?: (params: {
+    sceneId: string;
+    prompt?: string;
+    useGeneratedAsSource?: boolean;
+  }) => void;
 }) {
   const [regenerateDialogOpen, setRegenerateDialogOpen] = useState(false);
   const [regenerateSceneId, setRegenerateSceneId] = useState<string | null>(
     null
   );
   const [regeneratePrompt, setRegeneratePrompt] = useState("");
+  const [useGeneratedAsSource, setUseGeneratedAsSource] = useState(false);
+  const [hasCompletedGeneration, setHasCompletedGeneration] = useState(false);
 
   const isActive =
     generation.status === "pending" ||
@@ -1171,8 +1185,12 @@ function CompositeGenerationCard({
         (c) => c.sceneId === sceneId && c.generationId === sg.id
       )
     );
+    const hasCompleted =
+      sceneGen?.status === "completed" && !!sceneGen?.videoUrl;
     setRegenerateSceneId(sceneId);
     setRegeneratePrompt(sceneGen?.prompt || "");
+    setHasCompletedGeneration(hasCompleted);
+    setUseGeneratedAsSource(false);
     setRegenerateDialogOpen(true);
   };
 
@@ -1181,6 +1199,7 @@ function CompositeGenerationCard({
       onRegenerateScene({
         sceneId: regenerateSceneId,
         prompt: regeneratePrompt || undefined,
+        useGeneratedAsSource: useGeneratedAsSource || undefined,
       });
       setRegenerateDialogOpen(false);
       setRegenerateSceneId(null);
@@ -1410,16 +1429,57 @@ function CompositeGenerationCard({
           <DialogHeader>
             <DialogTitle>Перегенерация сцены</DialogTitle>
             <DialogDescription>
-              Введите или измените промпт для генерации новой версии сцены
+              Выберите источник и введите промпт для генерации
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <Textarea
-              className="min-h-[120px]"
-              onChange={(e) => setRegeneratePrompt(e.target.value)}
-              placeholder="Опишите что должно быть на видео..."
-              value={regeneratePrompt}
-            />
+            {/* Source selection */}
+            <div className="space-y-2">
+              <p className="font-medium text-sm">Источник:</p>
+              <div className="flex gap-2">
+                <Button
+                  className="flex-1"
+                  onClick={() => setUseGeneratedAsSource(false)}
+                  size="sm"
+                  variant={useGeneratedAsSource ? "outline" : "default"}
+                >
+                  <Film className="mr-2 h-4 w-4" />
+                  Оригинал
+                </Button>
+                <Button
+                  className="flex-1"
+                  disabled={!hasCompletedGeneration}
+                  onClick={() => setUseGeneratedAsSource(true)}
+                  size="sm"
+                  title={
+                    hasCompletedGeneration
+                      ? "Использовать предыдущую генерацию"
+                      : "Нет завершённой генерации"
+                  }
+                  variant={useGeneratedAsSource ? "default" : "outline"}
+                >
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Генерация
+                </Button>
+              </div>
+              {!hasCompletedGeneration && (
+                <p className="text-muted-foreground text-xs">
+                  Для использования генерации как источника нужна завершённая
+                  генерация этой сцены
+                </p>
+              )}
+            </div>
+
+            {/* Prompt */}
+            <div className="space-y-2">
+              <p className="font-medium text-sm">Промпт:</p>
+              <Textarea
+                className="min-h-[100px]"
+                onChange={(e) => setRegeneratePrompt(e.target.value)}
+                placeholder="Опишите что должно быть на видео..."
+                value={regeneratePrompt}
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button

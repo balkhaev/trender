@@ -87,7 +87,7 @@ const JSON_REGEX = /\[[\s\S]*\]/;
 const ENHANCE_PROMPT_FOR_KLING = `
 You are an expert at writing prompts for Kling AI video generation.
 
-Your task: Take the user's remix prompt and ENHANCE it to maximize visual quality and PRECISION in object targeting.
+Your task: Take the user's remix prompt and ENHANCE it to maximize visual quality, PRECISION in object targeting, and REALISTIC PHYSICS.
 
 KLING AI SPECIFICS:
 - Kling uses <<<video_1>>> to reference the source video
@@ -103,19 +103,28 @@ When replacing objects, you MUST specify:
 3. What should remain UNCHANGED around it
 4. Use "surgical" language: "Replace ONLY the...", "Target specifically the..."
 
+CRITICAL - PHYSICS AND SPATIAL REALISM:
+When replacing objects, you MUST ensure:
+1. The replacement maintains EXACT angle, orientation, and perspective of the original
+2. The replacement interacts REALISTICALLY with the environment (sits on ground properly, follows road contours, obeys gravity)
+3. Wheels/contact points touch surfaces correctly - no floating, no clipping through objects
+4. Motion and trajectory match the original object's movement
+5. Scale is proportionally correct relative to surroundings
+6. Shadows and reflections are consistent with the scene
+
 ENHANCEMENT RULES:
 1. Keep ALL original <<<video_1>>>, <<<image_N>>>, <<<element_N>>> references EXACTLY as they are
 2. Expand vague descriptions into specific visual details with position hints
 3. Add style keywords: realistic, cinematic, high quality, detailed
-4. Specify lighting, textures, materials where appropriate
-5. Keep the prompt concise but descriptive (max 200 words)
+4. ALWAYS add physics instructions: "maintain realistic ground contact", "preserve correct perspective and angle"
+5. Keep the prompt concise but descriptive (max 250 words)
 6. Preserve the original intent and all transformations
 7. If "Keep unchanged:" list exists, reinforce it in the enhanced prompt
 8. Output ONLY the enhanced prompt, nothing else
 
 EXAMPLE:
 Input: "Replace ONLY the Porsche (red sports car) located center-left with <<<image_1>>>. Keep unchanged: Santa Claus, House"
-Output: "Based on <<<video_1>>>, replace ONLY the bright red Porsche 911 sports car located in the center-left of the frame with the reference from <<<image_1>>>. The replacement should maintain the same position, scale, angle, and lighting. Keep all other elements completely unchanged, especially the Santa Claus figure and the house in the background. Do not modify anything except the target vehicle. High quality, seamless integration, matching shadows and reflections."
+Output: "Based on <<<video_1>>>, replace ONLY the bright red Porsche 911 sports car located in the center-left of the frame with the reference from <<<image_1>>>. CRITICAL: The replacement vehicle MUST maintain the exact same angle, orientation, and perspective as the original. Wheels must have realistic ground contact - no floating or clipping. The vehicle must follow the same trajectory and motion path. Preserve correct scale relative to surroundings. Match lighting, shadows, and reflections. Keep all other elements completely unchanged, especially the Santa Claus figure and the house in the background. High quality, physically realistic, seamless integration."
 `;
 
 export class OpenAIService {
