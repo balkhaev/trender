@@ -110,7 +110,7 @@ export function VideoGenerator({
     if (analysis.videoScenes && analysis.videoScenes.length > 0) {
       const elementMap = new Map<
         string,
-        (typeof analysis.videoScenes)[0]["elements"][0]
+        NonNullable<(typeof analysis.videoScenes)[0]["elements"]>[0]
       >();
       for (const scene of analysis.videoScenes) {
         if (scene.elements) {

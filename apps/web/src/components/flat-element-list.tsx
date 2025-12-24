@@ -119,7 +119,7 @@ function ElementCard({
   };
 
   // Get scenes where this element appears
-  const appearanceScenes = element.appearances
+  const appearanceScenes = (element.appearances ?? [])
     .map((app) => scenes.find((s) => s.index === app.sceneIndex))
     .filter(Boolean) as VideoScene[];
 
@@ -138,7 +138,7 @@ function ElementCard({
         </p>
 
         {/* Appearances */}
-        {element.appearances.length > 0 && (
+        {element.appearances && element.appearances.length > 0 && (
           <div className="mt-2 flex flex-wrap items-center gap-1">
             <Clock className="h-3 w-3 text-muted-foreground" />
             {element.appearances.map((app, idx) => (

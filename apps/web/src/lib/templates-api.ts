@@ -51,7 +51,7 @@ export type VideoElement = {
   label: string;
   description: string;
   remixOptions: RemixOption[];
-  appearances: ElementAppearance[];
+  appearances?: ElementAppearance[];
   thumbnailUrl?: string | null;
 };
 
@@ -65,6 +65,7 @@ export type VideoScene = {
   thumbnailUrl: string | null;
   thumbnailS3Key: string | null;
   elementIds: string[];
+  elements?: LegacyElement[];
   generationStatus:
     | "none"
     | "pending"

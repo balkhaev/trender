@@ -20,7 +20,7 @@ export function buildSceneSelections(
   const affectedSceneIndexes = new Set<number>();
   for (const selection of activeSelections) {
     const element = elements.find((e) => e.id === selection.elementId);
-    if (!element) continue;
+    if (!(element && element.appearances)) continue;
     for (const appearance of element.appearances) {
       affectedSceneIndexes.add(appearance.sceneIndex);
     }
@@ -33,7 +33,7 @@ export function buildSceneSelections(
       const sceneElementSelections = activeSelections
         .filter((sel) => {
           const el = elements.find((e) => e.id === sel.elementId);
-          return el?.appearances.some((a) => a.sceneIndex === scene.index);
+          return el?.appearances?.some((a) => a.sceneIndex === scene.index);
         })
         .map((sel) => ({
           element_id: sel.elementId,
