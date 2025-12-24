@@ -63,6 +63,7 @@ COPY --from=deps /repo/node_modules ./node_modules
 COPY --from=deps /repo/packages/db/node_modules ./packages/db/node_modules
 COPY --from=deps /repo/packages/auth/node_modules ./packages/auth/node_modules
 COPY --from=deps /repo/packages/api-contracts/node_modules ./packages/api-contracts/node_modules
+COPY --from=deps /repo/packages/types/node_modules ./packages/types/node_modules
 COPY --from=deps /repo/apps/web/node_modules ./apps/web/node_modules
 
 COPY --from=prisma-gen /work/packages/db/prisma/generated ./packages/db/prisma/generated

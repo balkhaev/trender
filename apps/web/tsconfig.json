@@ -20,7 +20,11 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@trender/api-contracts": ["../../packages/api-contracts/src/index.ts"],
+      "@trender/types": ["../../packages/types/src/index.ts"],
+      "@trender/types/*": ["../../packages/types/src/*"],
+      "@trender/db": ["../../packages/db/src/index.ts"]
     },
     "strictNullChecks": true
   },
