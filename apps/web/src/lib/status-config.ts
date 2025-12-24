@@ -126,3 +126,76 @@ export const LOG_LEVEL_CONFIG: Record<
 export function isAnimatedStatus(status: ReelStatus): boolean {
   return status === "downloading" || status === "analyzing";
 }
+
+/**
+ * Конфигурация статусов генерации видео
+ */
+export const GENERATION_STATUS_CONFIG: Record<
+  string,
+  { label: string; className: string }
+> = {
+  pending: {
+    label: "В очереди",
+    className: "border-amber-500/20 bg-amber-500/10 text-amber-200",
+  },
+  processing: {
+    label: "Генерация...",
+    className: "border-blue-500/20 bg-blue-500/10 text-blue-200",
+  },
+  completed: {
+    label: "Готово",
+    className: "border-emerald-500/20 bg-emerald-500/10 text-emerald-200",
+  },
+  failed: {
+    label: "Ошибка",
+    className: "border-red-500/20 bg-red-500/10 text-red-200",
+  },
+};
+
+/**
+ * Конфигурация статусов составной генерации
+ */
+export const COMPOSITE_STATUS_CONFIG: Record<
+  string,
+  { label: string; className: string }
+> = {
+  pending: {
+    label: "В очереди",
+    className: "border-amber-500/20 bg-amber-500/10 text-amber-200",
+  },
+  waiting: {
+    label: "Ожидание сцен",
+    className: "border-blue-500/20 bg-blue-500/10 text-blue-200",
+  },
+  generating: {
+    label: "Генерация",
+    className: "border-violet-500/20 bg-violet-500/10 text-violet-200",
+  },
+  concatenating: {
+    label: "Склейка",
+    className: "border-cyan-500/20 bg-cyan-500/10 text-cyan-200",
+  },
+  uploading: {
+    label: "Загрузка",
+    className: "border-blue-500/20 bg-blue-500/10 text-blue-200",
+  },
+  completed: {
+    label: "Готово",
+    className: "border-emerald-500/20 bg-emerald-500/10 text-emerald-200",
+  },
+  failed: {
+    label: "Ошибка",
+    className: "border-red-500/20 bg-red-500/10 text-red-200",
+  },
+};
+
+/**
+ * Возвращает вариант Badge для статуса генерации
+ */
+export function getGenerationVariant(
+  status: string
+): "default" | "destructive" | "secondary" {
+  if (status === "completed") return "default";
+  if (status === "failed") return "destructive";
+  return "secondary";
+}

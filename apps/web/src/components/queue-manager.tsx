@@ -62,7 +62,7 @@ import {
   resumeQueue,
   retryJob,
 } from "@/lib/queues-api";
-import { cn } from "@/lib/utils";
+import { cn, formatDurationBetween, formatTimestamp } from "@/lib/utils";
 
 const QUEUE_LABELS: Record<string, string> = {
   "reel-pipeline": "Анализ рилсов",
@@ -79,25 +79,6 @@ const STATE_LABELS: Record<JobState, string> = {
   failed: "Проваленные",
   delayed: "Отложенные",
 };
-
-function formatTimestamp(ts: number): string {
-  return new Date(ts).toLocaleString("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function formatDuration(start: number, end?: number): string {
-  const duration = (end ?? Date.now()) - start;
-  const seconds = Math.floor(duration / 1000);
-  if (seconds < 60) {
-    return `${seconds}с`;
-  }
-  const minutes = Math.floor(seconds / 60);
-  return `${minutes}м ${seconds % 60}с`;
-}
 
 export function QueueManager() {
   const queryClient = useQueryClient();
@@ -502,7 +483,7 @@ function JobRow({
         {formatTimestamp(job.timestamp)}
         {job.processedOn ? (
           <span className="ml-2">
-            ({formatDuration(job.processedOn, job.finishedOn)})
+            ({formatDurationBetween(job.processedOn, job.finishedOn)})
           </span>
         ) : null}
       </TableCell>

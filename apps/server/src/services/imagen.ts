@@ -1,7 +1,7 @@
 /**
  * Сервис генерации изображений через Google Gemini Imagen
  */
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, PersonGeneration } from "@google/genai";
 import prisma from "@trender/db";
 import { ai } from "../config";
 import { getS3Key, isS3Configured, s3Service } from "./s3";
@@ -81,7 +81,9 @@ export class ImagenService {
         aspectRatio,
         // Разрешаем персонажей для категории character
         personGeneration:
-          category === "character" ? "allow_adult" : "dont_allow",
+          category === "character"
+            ? PersonGeneration.ALLOW_ADULT
+            : PersonGeneration.DONT_ALLOW,
       },
     });
 

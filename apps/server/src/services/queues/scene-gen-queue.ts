@@ -466,9 +466,11 @@ async function concatenateVideos(videoUrls: string[]): Promise<Buffer> {
   // Send to concat endpoint
   const formData = new FormData();
   for (let i = 0; i < videoBuffers.length; i++) {
+    const buffer = videoBuffers[i];
+    if (!buffer) continue;
     formData.append(
       "videos",
-      new Blob([videoBuffers[i]], { type: "video/mp4" }),
+      new Blob([buffer], { type: "video/mp4" }),
       `video_${i}.mp4`
     );
   }

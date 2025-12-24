@@ -905,7 +905,6 @@ export async function analyzeReelUnified(
     for (const element of elementsWithOptions) {
       // Add sceneId to appearances
       const appearancesWithSceneId = element.appearances.map((app) => {
-        const scene = scenesToProcess.find((s) => s.index === app.sceneIndex);
         return {
           sceneIndex: app.sceneIndex,
           startTime: app.startTime,

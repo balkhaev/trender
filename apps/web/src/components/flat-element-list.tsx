@@ -23,6 +23,7 @@ import {
   type VideoElement,
   type VideoScene,
 } from "@/lib/templates-api";
+import { formatTime } from "@/lib/utils";
 import { ImagePickerDialog } from "./library/image-picker-dialog";
 
 // Selection state for a single element
@@ -40,12 +41,6 @@ type FlatElementListProps = {
   onSelectionsChange: (selections: ElementSelection[]) => void;
   disabled?: boolean;
 };
-
-function formatTime(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, "0")}`;
-}
 
 function ElementTypeIcon({ type }: { type: VideoElement["type"] }) {
   switch (type) {

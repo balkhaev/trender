@@ -33,17 +33,8 @@ import {
   useUploadPipelineVideo,
 } from "@/lib/hooks/use-dashboard";
 import type { JobStatus } from "@/lib/reels-api";
+import { formatNumber } from "@/lib/utils";
 import { InstagramAuthPanel } from "./instagram-auth-panel";
-
-function formatNumber(num: number): string {
-  if (num >= 1_000_000) {
-    return `${(num / 1_000_000).toFixed(1)}M`;
-  }
-  if (num >= 1000) {
-    return `${(num / 1000).toFixed(0)}K`;
-  }
-  return num.toString();
-}
 
 function JobStatusBadge({ status }: { status: JobStatus }) {
   switch (status) {

@@ -327,7 +327,17 @@ const getReelLogsRoute = createRoute({
       content: {
         "application/json": {
           schema: z.object({
-            logs: z.array(z.any()),
+            logs: z.array(
+              z.object({
+                id: z.string(),
+                level: z.string(),
+                stage: z.string(),
+                message: z.string(),
+                duration: z.number().nullable(),
+                createdAt: z.string(),
+                metadata: z.unknown(),
+              })
+            ),
           }),
         },
       },
@@ -523,6 +533,10 @@ const resizeReelRoute = createRoute({
         },
       },
       description: "Resize result",
+    },
+    400: {
+      content: { "application/json": { schema: ErrorResponseSchema } },
+      description: "Video not downloaded",
     },
     404: {
       content: { "application/json": { schema: NotFoundResponseSchema } },
@@ -1212,7 +1226,20 @@ reelsRouter.openapi(getReelLogsRoute, async (c) => {
         )
       : await pipelineLogger.getReelLogs(id, limit || 100);
 
-    return c.json({ logs }, 200);
+    return c.json(
+      {
+        logs: logs.map((log) => ({
+          id: log.id,
+          level: log.level as string,
+          stage: log.stage,
+          message: log.message,
+          duration: log.duration,
+          createdAt: log.createdAt.toISOString(),
+          metadata: log.metadata as unknown,
+        })),
+      },
+      200
+    );
   } catch (error) {
     console.error("Get logs error:", error);
     return c.json({ error: "Failed to get logs" }, 500);

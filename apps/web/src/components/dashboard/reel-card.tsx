@@ -21,22 +21,7 @@ import {
   type ReelStatus,
   type SavedReel,
 } from "@/lib/reels-api";
-
-function formatNumber(num: number): string {
-  if (num >= 1_000_000) {
-    return `${(num / 1_000_000).toFixed(1)}M`;
-  }
-  if (num >= 1000) {
-    return `${(num / 1000).toFixed(0)}K`;
-  }
-  return num.toString();
-}
-
-function formatDuration(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins}:${secs.toString().padStart(2, "0")}`;
-}
+import { formatDuration, formatNumber } from "@/lib/utils";
 
 function StatusBadge({ status }: { status: ReelStatus }) {
   const variants: Record<

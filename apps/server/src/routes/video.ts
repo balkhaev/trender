@@ -14,10 +14,8 @@ import {
   UpdateAnalysisRequestSchema,
   UploadImageRequestSchema,
   UploadReferenceResponseSchema,
-  VideoAnalysisDbSchema,
   VideoAnalysisListQuerySchema,
   VideoGenerationListQuerySchema,
-  VideoGenerationSchema,
 } from "../schemas";
 import { getGeminiService, type VideoAnalysis } from "../services/gemini";
 import { getDownloadsPath } from "../services/instagram/downloader";
@@ -297,9 +295,7 @@ const getGenerationRoute = createRoute({
         "application/json": {
           schema: z.object({
             success: z.boolean(),
-            generation: VideoGenerationSchema.extend({
-              analysis: z.any().optional(),
-            }),
+            generation: z.any(),
           }),
         },
       },
@@ -337,10 +333,10 @@ const getGenerationLogsRoute = createRoute({
               id: z.string(),
               status: z.string(),
               progress: z.number(),
-              progress_stage: z.string().nullable(),
-              progress_message: z.string().nullable(),
-              kling_progress: z.number().nullable(),
-              last_activity_at: z.any().nullable(),
+              progressStage: z.string().nullable(),
+              progressMessage: z.string().nullable(),
+              klingProgress: z.number().nullable(),
+              lastActivityAt: z.any().nullable(),
             }),
             logs: z.array(
               z.object({
@@ -348,7 +344,7 @@ const getGenerationLogsRoute = createRoute({
                 level: z.string(),
                 stage: z.string(),
                 message: z.string(),
-                created_at: z.any(),
+                createdAt: z.any(),
               })
             ),
           }),
@@ -420,7 +416,7 @@ const listAnalysesRoute = createRoute({
         "application/json": {
           schema: z.object({
             success: z.boolean(),
-            analyses: z.array(VideoAnalysisDbSchema),
+            analyses: z.array(z.any()),
             total: z.number(),
             limit: z.number(),
             offset: z.number(),
@@ -451,9 +447,7 @@ const listGenerationsRoute = createRoute({
         "application/json": {
           schema: z.object({
             success: z.boolean(),
-            generations: z.array(
-              VideoGenerationSchema.extend({ analysis: z.any().optional() })
-            ),
+            generations: z.array(z.any()),
             total: z.number(),
             limit: z.number(),
             offset: z.number(),
@@ -486,7 +480,7 @@ const getAnalysisRoute = createRoute({
         "application/json": {
           schema: z.object({
             success: z.boolean(),
-            analysis: VideoAnalysisDbSchema,
+            analysis: z.any(),
           }),
         },
       },
@@ -639,12 +633,28 @@ video.openapi(analyzeRoute, async (c) => {
       },
     });
 
-    return c.json({
-      success: true,
-      analysis,
-      analysisId: saved.id,
-      mode,
-    });
+    return c.json(
+      {
+        success: true,
+        analysis: {
+          id: saved.id,
+          sourceType: saved.sourceType,
+          sourceId: saved.sourceId,
+          fileName: saved.fileName,
+          duration: saved.duration,
+          aspectRatio: saved.aspectRatio,
+          elements: analysis.elements,
+          tags: analysis.tags,
+          analysisType: saved.analysisType,
+          hasScenes: saved.hasScenes,
+          scenesCount: saved.scenesCount,
+          createdAt: saved.createdAt.toISOString(),
+        },
+        analysisId: saved.id,
+        mode,
+      },
+      200
+    );
   } catch (error) {
     console.error("Video analysis error:", error);
 
@@ -696,11 +706,27 @@ video.openapi(analyzeDownloadedRoute, async (c) => {
 
     const saved = await saveAnalysis(analysis, "download", undefined, filename);
 
-    return c.json({
-      success: true,
-      analysis,
-      analysisId: saved.id,
-    });
+    return c.json(
+      {
+        success: true,
+        analysis: {
+          id: saved.id,
+          sourceType: saved.sourceType,
+          sourceId: saved.sourceId,
+          fileName: saved.fileName,
+          duration: saved.duration,
+          aspectRatio: saved.aspectRatio,
+          elements: analysis.elements,
+          tags: analysis.tags,
+          analysisType: saved.analysisType,
+          hasScenes: saved.hasScenes,
+          scenesCount: saved.scenesCount,
+          createdAt: saved.createdAt.toISOString(),
+        },
+        analysisId: saved.id,
+      },
+      200
+    );
   } catch (error) {
     console.error("Downloaded video analysis error:", error);
 
@@ -788,11 +814,27 @@ video.openapi(analyzeReelRoute, async (c) => {
 
     const saved = await saveAnalysis(analysis, "reel", reelId, `${reelId}.mp4`);
 
-    return c.json({
-      success: true,
-      analysis,
-      analysisId: saved.id,
-    });
+    return c.json(
+      {
+        success: true,
+        analysis: {
+          id: saved.id,
+          sourceType: saved.sourceType,
+          sourceId: saved.sourceId,
+          fileName: saved.fileName,
+          duration: saved.duration,
+          aspectRatio: saved.aspectRatio,
+          elements: analysis.elements,
+          tags: analysis.tags,
+          analysisType: saved.analysisType,
+          hasScenes: saved.hasScenes,
+          scenesCount: saved.scenesCount,
+          createdAt: saved.createdAt.toISOString(),
+        },
+        analysisId: saved.id,
+      },
+      200
+    );
   } catch (error) {
     console.error("Reel analysis error:", error);
 
@@ -846,10 +888,13 @@ video.openapi(generateRoute, async (c) => {
       options
     );
 
-    return c.json({
-      success: true,
-      generation_id: generationId,
-    });
+    return c.json(
+      {
+        success: true,
+        generation_id: generationId,
+      },
+      200
+    );
   } catch (error) {
     console.error("Video generation error:", error);
 
@@ -886,10 +931,13 @@ video.openapi(updateAnalysisRoute, async (c) => {
       data: updateData,
     });
 
-    return c.json({
-      success: true,
-      analysis: updated,
-    });
+    return c.json(
+      {
+        success: true,
+        analysis: updated,
+      },
+      200
+    );
   } catch (error) {
     console.error("Update analysis error:", error);
 
@@ -914,10 +962,36 @@ video.openapi(getGenerationRoute, async (c) => {
       return c.json({ error: "Generation not found" }, 404);
     }
 
-    return c.json({
-      success: true,
-      generation,
-    });
+    return c.json(
+      {
+        success: true,
+        generation: {
+          id: generation.id,
+          analysisId: generation.analysisId,
+          status: generation.status,
+          progress: generation.progress,
+          progressStage: generation.progressStage,
+          progressMessage: generation.progressMessage,
+          klingProgress: generation.klingProgress,
+          klingTaskId: generation.klingTaskId,
+          videoUrl: generation.videoUrl,
+          s3Key: generation.s3Key,
+          duration: generation.analysis?.duration ?? null,
+          aspectRatio: generation.analysis?.aspectRatio ?? null,
+          createdAt: generation.createdAt.toISOString(),
+          completedAt: generation.completedAt?.toISOString() ?? null,
+          error: generation.error,
+          lastActivityAt: generation.lastActivityAt?.toISOString() ?? null,
+          analysis: generation.analysis
+            ? {
+                ...generation.analysis,
+                createdAt: generation.analysis.createdAt.toISOString(),
+              }
+            : undefined,
+        },
+      },
+      200
+    );
   } catch (error) {
     console.error("Get generation error:", error);
 
@@ -967,19 +1041,28 @@ video.openapi(getGenerationLogsRoute, async (c) => {
       });
     }
 
-    return c.json({
-      success: true,
-      generation: {
-        id: generation.id,
-        status: generation.status,
-        progress: generation.progress,
-        progress_stage: generation.progressStage,
-        progress_message: generation.progressMessage,
-        kling_progress: generation.klingProgress,
-        last_activity_at: generation.lastActivityAt,
+    return c.json(
+      {
+        success: true,
+        generation: {
+          id: generation.id,
+          status: generation.status,
+          progress: generation.progress,
+          progressStage: generation.progressStage,
+          progressMessage: generation.progressMessage,
+          klingProgress: generation.klingProgress,
+          lastActivityAt: generation.lastActivityAt?.toISOString() ?? null,
+        },
+        logs: logs.map((log) => ({
+          id: log.id,
+          level: log.level,
+          stage: log.stage,
+          message: log.message,
+          createdAt: log.createdAt.toISOString(),
+        })),
       },
-      logs,
-    });
+      200
+    );
   } catch (error) {
     console.error("Get generation logs error:", error);
 
@@ -1115,13 +1198,24 @@ video.openapi(listAnalysesRoute, async (c) => {
       prisma.videoAnalysis.count(),
     ]);
 
-    return c.json({
-      success: true,
-      analyses,
-      total,
-      limit,
-      offset,
-    });
+    return c.json(
+      {
+        success: true,
+        analyses: analyses.map((a) => ({
+          ...a,
+          createdAt: a.createdAt.toISOString(),
+          generations: a.generations.map((g) => ({
+            id: g.id,
+            status: g.status,
+            createdAt: g.createdAt.toISOString(),
+          })),
+        })),
+        total,
+        limit,
+        offset,
+      },
+      200
+    );
   } catch (error) {
     console.error("List analyses error:", error);
 
@@ -1150,13 +1244,39 @@ video.openapi(listGenerationsRoute, async (c) => {
       prisma.videoGeneration.count({ where }),
     ]);
 
-    return c.json({
-      success: true,
-      generations,
-      total,
-      limit,
-      offset,
-    });
+    return c.json(
+      {
+        success: true,
+        generations: generations.map((g) => ({
+          id: g.id,
+          analysisId: g.analysisId,
+          status: g.status,
+          progress: g.progress,
+          progressStage: g.progressStage,
+          progressMessage: g.progressMessage,
+          klingProgress: g.klingProgress,
+          klingTaskId: g.klingTaskId,
+          videoUrl: g.videoUrl,
+          s3Key: g.s3Key,
+          duration: g.analysis?.duration ?? null,
+          aspectRatio: g.analysis?.aspectRatio ?? null,
+          createdAt: g.createdAt.toISOString(),
+          completedAt: g.completedAt?.toISOString() ?? null,
+          error: g.error,
+          lastActivityAt: g.lastActivityAt?.toISOString() ?? null,
+          analysis: g.analysis
+            ? {
+                ...g.analysis,
+                createdAt: g.analysis.createdAt.toISOString(),
+              }
+            : undefined,
+        })),
+        total,
+        limit,
+        offset,
+      },
+      200
+    );
   } catch (error) {
     console.error("List generations error:", error);
 
@@ -1183,10 +1303,21 @@ video.openapi(getAnalysisRoute, async (c) => {
       return c.json({ error: "Analysis not found" }, 404);
     }
 
-    return c.json({
-      success: true,
-      analysis,
-    });
+    return c.json(
+      {
+        success: true,
+        analysis: {
+          ...analysis,
+          createdAt: analysis.createdAt.toISOString(),
+          generations: analysis.generations.map((g) => ({
+            id: g.id,
+            status: g.status,
+            createdAt: g.createdAt.toISOString(),
+          })),
+        },
+      },
+      200
+    );
   } catch (error) {
     console.error("Get analysis error:", error);
 
@@ -1259,12 +1390,15 @@ video.openapi(uploadReferenceRoute, async (c) => {
       },
     });
 
-    return c.json({
-      success: true,
-      url,
-      s3_key: s3Key,
-      image_id: imageId,
-    });
+    return c.json(
+      {
+        success: true,
+        url,
+        s3Key,
+        imageId,
+      },
+      200
+    );
   } catch (error) {
     console.error("Upload reference error:", error);
 
