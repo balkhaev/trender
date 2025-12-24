@@ -118,6 +118,7 @@ export const videoGenWorker = new Worker<VideoGenJobData, VideoGenJobResult>(
           keepAudio: options?.keepAudio,
           imageUrls: options?.imageUrls,
           elements: options?.elements,
+          negativePrompt: options?.negativePrompt,
           onProgress: async (status, klingProgress, message) => {
             // Map Kling status to our progress percentage (10-60%)
             let percent = 15;

@@ -82,6 +82,8 @@ export type VideoGenJobData = {
     imageUrls?: string[];
     /** Elements for @Element1, @Element2... references */
     elements?: KlingImageElement[];
+    /** Negative prompt to protect unselected objects */
+    negativePrompt?: string;
   };
 };
 
@@ -126,6 +128,8 @@ export type SceneGenJobData = {
     keepAudio?: boolean;
     imageUrls?: string[];
     elements?: KlingImageElement[];
+    /** Negative prompt to protect unselected objects */
+    negativePrompt?: string;
   };
 };
 

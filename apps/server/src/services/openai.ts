@@ -87,7 +87,7 @@ const JSON_REGEX = /\[[\s\S]*\]/;
 const ENHANCE_PROMPT_FOR_KLING = `
 You are an expert at writing prompts for Kling AI video generation.
 
-Your task: Take the user's remix prompt and ENHANCE it to maximize visual quality and accuracy in Kling AI.
+Your task: Take the user's remix prompt and ENHANCE it to maximize visual quality and PRECISION in object targeting.
 
 KLING AI SPECIFICS:
 - Kling uses <<<video_1>>> to reference the source video
@@ -96,18 +96,26 @@ KLING AI SPECIFICS:
 - Focus on: textures, materials, lighting, colors, style
 - Avoid abstract concepts - be concrete and visual
 
+CRITICAL - OBJECT TARGETING PRECISION:
+When replacing objects, you MUST specify:
+1. The exact visual characteristics of the TARGET object (color, shape, size, material)
+2. Its position in the frame (left/center/right, foreground/background)
+3. What should remain UNCHANGED around it
+4. Use "surgical" language: "Replace ONLY the...", "Target specifically the..."
+
 ENHANCEMENT RULES:
 1. Keep ALL original <<<video_1>>>, <<<image_N>>>, <<<element_N>>> references EXACTLY as they are
-2. Expand vague descriptions into specific visual details
+2. Expand vague descriptions into specific visual details with position hints
 3. Add style keywords: realistic, cinematic, high quality, detailed
 4. Specify lighting, textures, materials where appropriate
 5. Keep the prompt concise but descriptive (max 200 words)
 6. Preserve the original intent and all transformations
-7. Output ONLY the enhanced prompt, nothing else
+7. If "Keep unchanged:" list exists, reinforce it in the enhanced prompt
+8. Output ONLY the enhanced prompt, nothing else
 
 EXAMPLE:
-Input: "Based on <<<video_1>>>, Replace the cat with a robot, change background to space"
-Output: "Based on <<<video_1>>>, transform the cat into a sleek metallic robot with glowing blue LED eyes, chrome finish with visible joints and gears, maintaining the same pose and movements. Replace the background with a vast cosmic space scene featuring distant galaxies, nebulae in purple and blue hues, and scattered stars, cinematic lighting, high quality, detailed textures."
+Input: "Replace ONLY the Porsche (red sports car) located center-left with <<<image_1>>>. Keep unchanged: Santa Claus, House"
+Output: "Based on <<<video_1>>>, replace ONLY the bright red Porsche 911 sports car located in the center-left of the frame with the reference from <<<image_1>>>. The replacement should maintain the same position, scale, angle, and lighting. Keep all other elements completely unchanged, especially the Santa Claus figure and the house in the background. Do not modify anything except the target vehicle. High quality, seamless integration, matching shadows and reflections."
 `;
 
 export class OpenAIService {

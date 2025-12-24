@@ -219,11 +219,12 @@ app.openapi(simpleConfigureRoute, async (c) => {
     remixOptions: Array<{ id: string; label: string; prompt: string }>;
   }>;
 
-  // Build prompt from selections (returns prompt with <<<image_N>>> refs and imageUrls array)
-  const { prompt: generatedPrompt, imageUrls } = buildPromptFromSelections(
-    elements,
-    selections
-  );
+  // Build prompt from selections (returns prompt with <<<image_N>>> refs, imageUrls, and negativePrompt)
+  const {
+    prompt: generatedPrompt,
+    imageUrls,
+    negativePrompt,
+  } = buildPromptFromSelections(elements, selections);
 
   // Estimate credits (5 per generation)
   const estimatedCredits = sceneSelections

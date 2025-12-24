@@ -229,22 +229,32 @@ app.openapi(generateRoute, async (c) => {
             }>,
           }));
 
-      // Build scene configs and start generation for each modified scene
-      const sceneConfigs: Array<{
+      // Prepare scene tasks - separate original and modified scenes
+      type SceneTask = {
+        scene: (typeof scenes)[0];
+        selection: (typeof sceneSelections)[0];
+        scenePrompt: string;
+        sceneImageUrls: string[];
+        sceneNegativePrompt?: string;
+      };
+
+      const originalScenes: Array<{
         sceneId: string;
         sceneIndex: number;
-        useOriginal: boolean;
-        generationId?: string;
+        useOriginal: true;
         startTime: number;
         endTime: number;
       }> = [];
 
+      const scenesToGenerate: SceneTask[] = [];
+
+      // First pass: categorize scenes
       for (const selection of sceneSelections) {
         const scene = scenes.find((s) => s.id === selection.sceneId);
         if (!scene) continue;
 
         if (selection.useOriginal) {
-          sceneConfigs.push({
+          originalScenes.push({
             sceneId: scene.id,
             sceneIndex: scene.index,
             useOriginal: true,
@@ -252,58 +262,58 @@ app.openapi(generateRoute, async (c) => {
             endTime: scene.endTime,
           });
         } else {
-          // Build prompt for this specific scene from its elementSelections
+          // Build prompt for this scene
           let scenePrompt = finalPrompt;
           let sceneImageUrls = configData.referenceImages;
+          let sceneNegativePrompt: string | undefined;
 
-          // If scene has element selections, build prompt from VideoElements
           if (
             selection.elementSelections &&
             selection.elementSelections.length > 0
           ) {
             const sceneElements = getElementsForScene(scene.index);
 
-            console.log(
-              `[Generate] Scene ${scene.index} elementSelections:`,
-              JSON.stringify(selection.elementSelections)
-            );
-            console.log(
-              `[Generate] Scene ${scene.index} sceneElements:`,
-              JSON.stringify(
-                sceneElements.map((e) => ({
-                  id: e.id,
-                  label: e.label,
-                  remixOptions: e.remixOptions,
-                }))
-              )
-            );
-
             if (sceneElements && sceneElements.length > 0) {
-              const { prompt: builtPrompt, imageUrls } =
-                buildPromptFromSelections(
-                  sceneElements,
-                  selection.elementSelections
-                );
-
-              console.log(
-                `[Generate] Scene ${scene.index} builtPrompt:`,
-                builtPrompt
+              const {
+                prompt: builtPrompt,
+                imageUrls,
+                negativePrompt: builtNegativePrompt,
+              } = buildPromptFromSelections(
+                sceneElements,
+                selection.elementSelections
               );
 
               if (builtPrompt) {
                 scenePrompt = builtPrompt;
                 sceneImageUrls = imageUrls;
+                sceneNegativePrompt = builtNegativePrompt;
               }
             }
           }
 
-          // Start generation for this scene with its own prompt
-          const sceneGenerationId = await sceneGenJobQueue.startSceneGeneration(
-            scene.id,
+          scenesToGenerate.push({
+            scene,
+            selection,
             scenePrompt,
+            sceneImageUrls,
+            sceneNegativePrompt,
+          });
+        }
+      }
+
+      // Start all scene generations in PARALLEL
+      console.log(
+        `[Generate] Starting ${scenesToGenerate.length} scene generations in parallel`
+      );
+
+      const generationResults = await Promise.all(
+        scenesToGenerate.map(async (task) => {
+          const sceneGenerationId = await sceneGenJobQueue.startSceneGeneration(
+            task.scene.id,
+            task.scenePrompt,
             sourceVideoUrl,
-            scene.startTime,
-            scene.endTime,
+            task.scene.startTime,
+            task.scene.endTime,
             {
               duration: genOptions.duration as 5 | 10 | undefined,
               aspectRatio: genOptions.aspectRatio as
@@ -313,20 +323,29 @@ app.openapi(generateRoute, async (c) => {
                 | "auto"
                 | undefined,
               keepAudio: genOptions.keepAudio,
-              imageUrls: sceneImageUrls.length > 0 ? sceneImageUrls : undefined,
+              imageUrls:
+                task.sceneImageUrls.length > 0
+                  ? task.sceneImageUrls
+                  : undefined,
+              negativePrompt: task.sceneNegativePrompt,
             }
           );
 
-          sceneConfigs.push({
-            sceneId: scene.id,
-            sceneIndex: scene.index,
-            useOriginal: false,
+          return {
+            sceneId: task.scene.id,
+            sceneIndex: task.scene.index,
+            useOriginal: false as const,
             generationId: sceneGenerationId,
-            startTime: scene.startTime,
-            endTime: scene.endTime,
-          });
-        }
-      }
+            startTime: task.scene.startTime,
+            endTime: task.scene.endTime,
+          };
+        })
+      );
+
+      // Combine original and generated scenes, sorted by index
+      const sceneConfigs = [...originalScenes, ...generationResults].sort(
+        (a, b) => a.sceneIndex - b.sceneIndex
+      );
 
       // Start composite generation (concatenation)
       const compositeId = await sceneGenJobQueue.startCompositeGeneration(

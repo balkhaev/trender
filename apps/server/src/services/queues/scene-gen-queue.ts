@@ -187,6 +187,7 @@ export const sceneGenWorker = new Worker<SceneGenJobData, SceneGenJobResult>(
         keepAudio: options?.keepAudio,
         imageUrls: options?.imageUrls,
         elements: options?.elements,
+        negativePrompt: options?.negativePrompt,
         onProgress: async (status, klingProgress, message) => {
           let percent = 25;
           if (status === "processing") {

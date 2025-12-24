@@ -1220,6 +1220,23 @@ video.openapi(uploadReferenceRoute, async (c) => {
 
     const url = getReferenceImagePublicUrl(imageId, extension);
 
+    // Save to UserMedia library for reuse
+    const userId = "default-user"; // TODO: Get from auth session
+    await prisma.userMedia.create({
+      data: {
+        id: imageId,
+        userId,
+        type: "image",
+        filename: file.name,
+        s3Key,
+        url,
+        size: file.size,
+        mimeType: file.type,
+        source: "upload",
+        category: "object", // Default category for references
+      },
+    });
+
     return c.json({
       success: true,
       url,

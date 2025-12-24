@@ -10,6 +10,7 @@ import {
   Download,
   ExternalLink,
   Eye,
+  Film,
   Heart,
   Loader2,
   Maximize,
@@ -62,8 +63,10 @@ import {
 } from "@/lib/hooks/use-templates";
 import { hasVideo, refreshReelMetadata } from "@/lib/reels-api";
 import type {
+  CompositeGeneration,
   KlingGenerationOptions,
   ReelLog,
+  SceneGeneration,
   StageStats,
   VideoGeneration,
 } from "@/lib/templates-api";
@@ -689,6 +692,78 @@ export default function ReelDetailPage() {
               </div>
             )}
 
+            {/* Generations Card - отдельная секция */}
+            {((data.generations?.length ?? 0) > 0 ||
+              (data.sceneGenerations?.length ?? 0) > 0 ||
+              (data.compositeGenerations?.length ?? 0) > 0) && (
+              <Card className="animate-delay-250 animate-fade-in-up">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Film className="h-4 w-4" />
+                    Генерации
+                    <Badge variant="secondary">
+                      {(data.generations?.length ?? 0) +
+                        (data.sceneGenerations?.length ?? 0) +
+                        (data.compositeGenerations?.length ?? 0)}
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Composite generations first (финальные результаты) */}
+                  {(data.compositeGenerations?.length ?? 0) > 0 && (
+                    <div className="space-y-3">
+                      <h4 className="flex items-center gap-2 font-medium text-muted-foreground text-sm">
+                        <Sparkles className="h-4 w-4" />
+                        Составные генерации
+                      </h4>
+                      {data.compositeGenerations?.map((gen) => (
+                        <CompositeGenerationCard
+                          generation={gen}
+                          key={gen.id}
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Full video generations */}
+                  {(data.generations?.length ?? 0) > 0 && (
+                    <div className="space-y-3">
+                      <h4 className="flex items-center gap-2 font-medium text-muted-foreground text-sm">
+                        <Film className="h-4 w-4" />
+                        Полные генерации
+                      </h4>
+                      {data.generations?.map((gen) => (
+                        <GenerationCard generation={gen} key={gen.id} />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Scene generations */}
+                  {(data.sceneGenerations?.length ?? 0) > 0 && (
+                    <Collapsible>
+                      <CollapsibleTrigger asChild>
+                        <Button
+                          className="w-full justify-between"
+                          variant="ghost"
+                        >
+                          <span className="flex items-center gap-2">
+                            <Clock className="h-4 w-4" />
+                            Генерации сцен ({data.sceneGenerations?.length})
+                          </span>
+                          <ChevronDown className="h-4 w-4 transition-transform [[data-state=open]>&]:rotate-180" />
+                        </Button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="mt-2 space-y-3">
+                        {data.sceneGenerations?.map((gen) => (
+                          <SceneGenerationCard generation={gen} key={gen.id} />
+                        ))}
+                      </CollapsibleContent>
+                    </Collapsible>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Debug Tabs - Collapsible */}
             <Collapsible className="animate-delay-300 animate-fade-in-up">
               <Card>
@@ -718,11 +793,6 @@ export default function ReelDetailPage() {
                           Логи ({data.logs?.length ?? 0})
                         </TabsTrigger>
                         <TabsTrigger value="stats">Статистика</TabsTrigger>
-                        {data.generations?.length > 0 ? (
-                          <TabsTrigger value="generations">
-                            Генерации ({data.generations.length})
-                          </TabsTrigger>
-                        ) : null}
                       </TabsList>
 
                       <TabsContent value="logs">
@@ -783,16 +853,6 @@ export default function ReelDetailPage() {
                           ) : null}
                         </div>
                       </TabsContent>
-
-                      {data.generations?.length > 0 ? (
-                        <TabsContent value="generations">
-                          <div className="space-y-3">
-                            {data.generations.map((gen) => (
-                              <GenerationCard generation={gen} key={gen.id} />
-                            ))}
-                          </div>
-                        </TabsContent>
-                      ) : null}
                     </Tabs>
                   </CardContent>
                 </CollapsibleContent>
@@ -1069,6 +1129,228 @@ function GenerationActions({
           Скачать
         </a>
       </Button>
+    </div>
+  );
+}
+
+function CompositeGenerationCard({
+  generation,
+}: {
+  generation: CompositeGeneration;
+}) {
+  const isActive =
+    generation.status === "pending" ||
+    generation.status === "waiting" ||
+    generation.status === "generating" ||
+    generation.status === "concatenating" ||
+    generation.status === "uploading";
+  const isCompleted = generation.status === "completed";
+  const isFailed = generation.status === "failed";
+
+  const duration =
+    generation.completedAt && generation.createdAt
+      ? Math.round(
+          (new Date(generation.completedAt).getTime() -
+            new Date(generation.createdAt).getTime()) /
+            1000
+        )
+      : null;
+
+  const statusConfig: Record<string, { label: string; className: string }> = {
+    pending: {
+      label: "В очереди",
+      className: "border-amber-500/20 bg-amber-500/10 text-amber-200",
+    },
+    waiting: {
+      label: "Ожидание сцен",
+      className: "border-blue-500/20 bg-blue-500/10 text-blue-200",
+    },
+    generating: {
+      label: "Генерация",
+      className: "border-violet-500/20 bg-violet-500/10 text-violet-200",
+    },
+    concatenating: {
+      label: "Склейка",
+      className: "border-cyan-500/20 bg-cyan-500/10 text-cyan-200",
+    },
+    uploading: {
+      label: "Загрузка",
+      className: "border-blue-500/20 bg-blue-500/10 text-blue-200",
+    },
+    completed: {
+      label: "Готово",
+      className: "border-emerald-500/20 bg-emerald-500/10 text-emerald-200",
+    },
+    failed: {
+      label: "Ошибка",
+      className: "border-red-500/20 bg-red-500/10 text-red-200",
+    },
+  };
+
+  const status = statusConfig[generation.status] || statusConfig.pending;
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-glass-border bg-card shadow-(--shadow-glass) backdrop-blur-xl">
+      <div className="flex items-center justify-between border-glass-border border-b bg-surface-2 px-4 py-2">
+        <div className="flex items-center gap-2">
+          <Badge variant="default">COMPOSITE</Badge>
+          <span
+            className={`rounded-full border px-2 py-0.5 text-xs ${status.className}`}
+          >
+            {isActive ? (
+              <span className="flex items-center gap-1">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                {status.label}
+              </span>
+            ) : (
+              status.label
+            )}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 text-muted-foreground text-xs">
+          <Clock className="h-3 w-3" />
+          {new Date(generation.createdAt).toLocaleString("ru-RU")}
+          {duration !== null && (
+            <span className="text-emerald-300">({duration}с)</span>
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-col p-4">
+        {generation.videoUrl && (
+          <div className="mb-3 flex h-80 gap-3">
+            <video
+              className="h-full rounded-lg"
+              controls
+              muted
+              src={generation.videoUrl}
+            />
+          </div>
+        )}
+
+        {/* Progress */}
+        {isActive && (
+          <div className="mb-3">
+            <div className="mb-1 flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">
+                {generation.progressMessage || "Обработка..."}
+              </span>
+              <span className="font-medium">{generation.progress}%</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-surface-1">
+              <div
+                className="h-full rounded-full bg-blue-500 transition-all"
+                style={{ width: `${generation.progress}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        <GenerationError error={generation.error} show={isFailed} />
+        <GenerationActions show={isCompleted} videoUrl={generation.videoUrl} />
+      </div>
+    </div>
+  );
+}
+
+function SceneGenerationCard({ generation }: { generation: SceneGeneration }) {
+  const isActive =
+    generation.status === "pending" || generation.status === "processing";
+  const isCompleted = generation.status === "completed";
+  const isFailed = generation.status === "failed";
+
+  const duration =
+    generation.completedAt && generation.createdAt
+      ? Math.round(
+          (new Date(generation.completedAt).getTime() -
+            new Date(generation.createdAt).getTime()) /
+            1000
+        )
+      : null;
+
+  const statusConfig: Record<string, { label: string; className: string }> = {
+    pending: {
+      label: "В очереди",
+      className: "border-amber-500/20 bg-amber-500/10 text-amber-200",
+    },
+    processing: {
+      label: "Генерация",
+      className: "border-blue-500/20 bg-blue-500/10 text-blue-200",
+    },
+    completed: {
+      label: "Готово",
+      className: "border-emerald-500/20 bg-emerald-500/10 text-emerald-200",
+    },
+    failed: {
+      label: "Ошибка",
+      className: "border-red-500/20 bg-red-500/10 text-red-200",
+    },
+  };
+
+  const status = statusConfig[generation.status] || statusConfig.pending;
+  const sceneInfo = generation.scene;
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-glass-border bg-card/50">
+      <div className="flex items-center justify-between border-glass-border border-b bg-surface-2/50 px-3 py-1.5">
+        <div className="flex items-center gap-2">
+          <Badge className="text-xs" variant="outline">
+            Сцена {sceneInfo ? sceneInfo.index + 1 : "?"}
+          </Badge>
+          {sceneInfo && (
+            <span className="text-muted-foreground text-xs">
+              {sceneInfo.startTime.toFixed(1)}s - {sceneInfo.endTime.toFixed(1)}
+              s
+            </span>
+          )}
+          <span
+            className={`rounded-full border px-2 py-0.5 text-xs ${status.className}`}
+          >
+            {isActive ? (
+              <span className="flex items-center gap-1">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                {status.label}
+              </span>
+            ) : (
+              status.label
+            )}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 text-muted-foreground text-xs">
+          {duration !== null && (
+            <span className="text-emerald-300">{duration}с</span>
+          )}
+        </div>
+      </div>
+
+      <div className="p-3">
+        {generation.videoUrl && (
+          <div className="mb-2">
+            <video
+              className="h-32 rounded-lg"
+              controls
+              muted
+              src={generation.videoUrl}
+            />
+          </div>
+        )}
+
+        {/* Progress */}
+        {isActive && (
+          <div className="mb-2">
+            <div className="h-1.5 overflow-hidden rounded-full bg-surface-1">
+              <div
+                className="h-full rounded-full bg-blue-500 transition-all"
+                style={{ width: `${generation.progress}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {isFailed && generation.error && (
+          <p className="text-red-300 text-xs">{generation.error}</p>
+        )}
+      </div>
     </div>
   );
 }

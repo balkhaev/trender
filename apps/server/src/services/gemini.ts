@@ -163,6 +163,7 @@ Return JSON:
       "type": "character",
       "label": "Young Woman",
       "description": "Woman in late 20s, long dark wavy hair, cream linen dress, holding coffee cup",
+      "position": "center of frame, foreground",
       "remixOptions": [
         {"id": "opt-1", "label": "Cyberpunk Android", "icon": "🤖", "prompt": "Cyberpunk android with glowing blue circuitry on metallic silver skin, neon LED eyes, chrome joints"},
         {"id": "opt-2", "label": "Fantasy Elf", "icon": "🧝", "prompt": "Ethereal elf with pointed ears, silver hair, golden eyes, elvish robes"},
@@ -174,6 +175,7 @@ Return JSON:
       "type": "object",
       "label": "Coffee Cup",
       "description": "Large ceramic mug, matte gray, steam rising",
+      "position": "center-right, held in hands",
       "remixOptions": [
         {"id": "opt-1", "label": "Magic Potion", "icon": "🧪", "prompt": "Bubbling potion in crystal vial with purple mist and glowing runes"},
         {"id": "opt-2", "label": "Alien Device", "icon": "👽", "prompt": "Alien tech with holographic display and floating energy orbs"},
@@ -185,6 +187,7 @@ Return JSON:
       "type": "background",
       "label": "Kitchen",
       "description": "Modern minimalist kitchen, white marble counters, morning sunlight",
+      "position": "full frame background",
       "remixOptions": [
         {"id": "opt-1", "label": "Spaceship", "icon": "🚀", "prompt": "Futuristic spaceship command center with holographic displays and stars through windows"},
         {"id": "opt-2", "label": "Medieval Castle", "icon": "🏰", "prompt": "Castle great hall with stone walls, torches, tapestries"},
@@ -210,7 +213,9 @@ RULES:
    - Last options = subtle but interesting changes
    - Diverse styles: Cyberpunk, Fantasy, Anime, Historical, Sci-Fi, Horror
 
-5. **label**: 2-3 words | **icon**: single emoji | **prompt**: specific visual details`;
+5. **label**: 2-3 words | **icon**: single emoji | **prompt**: specific visual details
+
+6. **position**: Where in frame the element appears (e.g., "center foreground", "left side", "background right"). REQUIRED for precise AI targeting.`;
 
 // Промпт для анализа БЕЗ генерации вариантов (для enchanting режима)
 const ELEMENTS_ONLY_PROMPT = `Identify key visual elements in this video for AI remix. NO remixOptions.
@@ -225,19 +230,22 @@ Return JSON:
       "id": "char-1",
       "type": "character",
       "label": "Young Woman",
-      "description": "Woman in late 20s, long dark wavy hair, cream linen dress, holding coffee cup"
+      "description": "Woman in late 20s, long dark wavy hair, cream linen dress, holding coffee cup",
+      "position": "center of frame, foreground"
     },
     {
       "id": "obj-1",
       "type": "object",
       "label": "Coffee Cup",
-      "description": "Large ceramic mug, matte gray, steam rising"
+      "description": "Large ceramic mug, matte gray, steam rising",
+      "position": "center-right, held in hands"
     },
     {
       "id": "bg-1",
       "type": "background",
       "label": "Kitchen",
-      "description": "Modern minimalist kitchen, white marble counters, morning sunlight"
+      "description": "Modern minimalist kitchen, white marble counters, morning sunlight",
+      "position": "full frame background"
     }
   ]
 }
@@ -247,7 +255,8 @@ RULES:
 2. **tags**: 3-5 short tags describing video theme/style/mood (lowercase, english)
 3. **elements**: Characters (char-1), Objects (obj-1), Backgrounds (bg-1)
 4. **NO remixOptions** - they will be generated separately
-5. **description**: Specific visual details (materials, colors, clothing)`;
+5. **description**: Specific visual details (materials, colors, clothing)
+6. **position**: Where in frame the element appears (e.g., "center foreground", "left side"). REQUIRED for precise AI targeting.`;
 
 const FRAMES_ELEMENTS_ONLY_PROMPT = `Identify key visual elements in these video frames. NO remixOptions.
 
@@ -257,9 +266,9 @@ Return JSON:
   "aspectRatio": "9:16",
   "tags": ["lifestyle", "morning", "cozy"],
   "elements": [
-    {"id": "char-1", "type": "character", "label": "Main Subject", "description": "Detailed description"},
-    {"id": "obj-1", "type": "object", "label": "Key Object", "description": "Most prominent object"},
-    {"id": "bg-1", "type": "background", "label": "Environment", "description": "Setting/background"}
+    {"id": "char-1", "type": "character", "label": "Main Subject", "description": "Detailed description", "position": "center foreground"},
+    {"id": "obj-1", "type": "object", "label": "Key Object", "description": "Most prominent object", "position": "center-right"},
+    {"id": "bg-1", "type": "background", "label": "Environment", "description": "Setting/background", "position": "full frame background"}
   ]
 }
 
@@ -268,7 +277,8 @@ RULES:
 2. **tags**: 3-5 short tags (lowercase, english)
 3. **elements**: Characters (char-1), Objects (obj-1), Backgrounds (bg-1)
 4. **NO remixOptions**
-5. Analyze ALL frames together`;
+5. Analyze ALL frames together
+6. **position**: Where in frame the element appears (e.g., "center foreground", "left side"). REQUIRED for precise AI targeting.`;
 
 // Промпт для unified анализа с привязкой к сценам
 const UNIFIED_ANALYSIS_PROMPT = `Analyze this video and identify unique visual elements. Track which scenes each element appears in.
@@ -287,6 +297,7 @@ Return JSON:
       "type": "character",
       "label": "Young Woman",
       "description": "Woman in late 20s, long dark wavy hair, cream linen dress",
+      "position": "center of frame, foreground",
       "appearances": [
         {"sceneIndex": 0, "startTime": 0, "endTime": 3.5},
         {"sceneIndex": 2, "startTime": 7.2, "endTime": 10.0}
@@ -297,6 +308,7 @@ Return JSON:
       "type": "object",
       "label": "Coffee Cup",
       "description": "Large ceramic mug, matte gray, steam rising",
+      "position": "center-right, held in hands",
       "appearances": [
         {"sceneIndex": 0, "startTime": 0, "endTime": 3.5}
       ]
@@ -306,6 +318,7 @@ Return JSON:
       "type": "background",
       "label": "Modern Kitchen",
       "description": "Minimalist kitchen, white marble counters, morning sunlight",
+      "position": "full frame background",
       "appearances": [
         {"sceneIndex": 0, "startTime": 0, "endTime": 3.5},
         {"sceneIndex": 1, "startTime": 3.5, "endTime": 7.2}
@@ -318,9 +331,10 @@ RULES:
 1. **UNIQUE ELEMENTS**: Each real-world entity = ONE element. Same person/object in multiple scenes = ONE element with multiple appearances.
 2. **appearances**: Array of scenes where this element is visible. Use ONLY sceneIndex values from SCENE BOUNDARIES above.
 3. **ELEMENT COUNT**: 3-6 elements total, ranked by visual importance.
-4. **NO remixOptions** - they will be generated separately.
-5. **description**: Specific visual details (materials, colors, clothing, features).
-6. **Match scene boundaries**: startTime/endTime must match the provided SCENE BOUNDARIES exactly.`;
+4. **position**: Where in frame the element appears (e.g., "center foreground", "left side"). REQUIRED for precise AI targeting.
+5. **NO remixOptions** - they will be generated separately.
+6. **description**: Specific visual details (materials, colors, clothing, features).
+7. **Match scene boundaries**: startTime/endTime must match the provided SCENE BOUNDARIES exactly.`;
 
 const FRAMES_ANALYSIS_PROMPT = `Identify key visual elements in these video frames for AI remix.
 

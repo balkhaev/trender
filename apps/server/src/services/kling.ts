@@ -353,6 +353,7 @@ export class KlingService {
       const requestBody: {
         model_name: string;
         prompt: string;
+        negative_prompt?: string;
         video_list: {
           video_url: string;
           refer_type: string;
@@ -376,6 +377,11 @@ export class KlingService {
         ],
         mode: options.mode || "pro",
       };
+
+      // Add negative prompt to protect unselected objects
+      if (options.negativePrompt) {
+        requestBody.negative_prompt = options.negativePrompt;
+      }
 
       // Add image references (<<<image_1>>>, <<<image_2>>>...)
       if (options.imageUrls && options.imageUrls.length > 0) {

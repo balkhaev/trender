@@ -34,7 +34,6 @@ import {
 } from "@/lib/hooks/use-dashboard";
 import type { JobStatus, SavedReel } from "@/lib/reels-api";
 import { InstagramAuthPanel } from "./instagram-auth-panel";
-import { VideoLibrary } from "./video-library";
 
 function formatNumber(num: number): string {
   if (num >= 1_000_000) {
@@ -297,10 +296,6 @@ export function ScraperPanel() {
               <p className="text-center text-[10px] text-muted-foreground">
                 Поддерживаются MP4, MOV. Макс. 100MB.
               </p>
-              <VideoLibrary
-                disabled={processReel.isPending}
-                onSelect={handleSelectFromLibrary}
-              />
             </div>
           </div>
 

@@ -2,6 +2,7 @@
 
 import {
   Clock,
+  FolderOpen,
   ImagePlus,
   Mountain,
   Package,
@@ -16,11 +17,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { MediaItem } from "@/lib/media-api";
 import {
   uploadImageReference,
   type VideoElement,
   type VideoScene,
 } from "@/lib/templates-api";
+import { ImagePickerDialog } from "./library/image-picker-dialog";
 
 // Selection state for a single element
 export type ElementSelection = {
@@ -72,6 +75,7 @@ type ElementCardProps = {
   selection: ElementSelection | undefined;
   onSelect: (optionId: string | null) => void;
   onCustomUpload: (file: File) => Promise<void>;
+  onSelectFromLibrary: () => void;
   onCustomPromptChange: (prompt: string) => void;
   onRemoveCustom: () => void;
   isUploading: boolean;
@@ -84,6 +88,7 @@ function ElementCard({
   selection,
   onSelect,
   onCustomUpload,
+  onSelectFromLibrary,
   onCustomPromptChange,
   onRemoveCustom,
   isUploading,
@@ -248,30 +253,41 @@ function ElementCard({
               </Button>
             </div>
           ) : (
-            <label
-              className={`flex cursor-pointer items-center justify-center gap-2 text-sm ${
-                isCustomSelected ? "text-primary" : "text-muted-foreground"
-              }`}
-            >
-              {isUploading ? (
-                <>
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                  Загрузка...
-                </>
-              ) : (
-                <>
-                  <ImagePlus className="h-4 w-4" />
-                  Загрузить своё изображение
-                </>
-              )}
-              <input
-                accept="image/*"
-                className="sr-only"
+            <div className="flex flex-col gap-2">
+              <label
+                className={`flex cursor-pointer items-center justify-center gap-2 text-sm ${
+                  isCustomSelected ? "text-primary" : "text-muted-foreground"
+                }`}
+              >
+                {isUploading ? (
+                  <>
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    Загрузка...
+                  </>
+                ) : (
+                  <>
+                    <ImagePlus className="h-4 w-4" />
+                    Загрузить своё изображение
+                  </>
+                )}
+                <input
+                  accept="image/*"
+                  className="sr-only"
+                  disabled={disabled || isUploading}
+                  onChange={handleFileChange}
+                  type="file"
+                />
+              </label>
+              <button
+                className="flex items-center justify-center gap-2 text-muted-foreground text-sm hover:text-primary"
                 disabled={disabled || isUploading}
-                onChange={handleFileChange}
-                type="file"
-              />
-            </label>
+                onClick={onSelectFromLibrary}
+                type="button"
+              >
+                <FolderOpen className="h-4 w-4" />
+                Выбрать из библиотеки
+              </button>
+            </div>
           )}
         </div>
 
@@ -304,6 +320,9 @@ export function FlatElementList({
 }: FlatElementListProps) {
   const [selections, setSelections] = useState<ElementSelection[]>([]);
   const [uploadingElement, setUploadingElement] = useState<string | null>(null);
+  const [libraryDialogElement, setLibraryDialogElement] = useState<
+    string | null
+  >(null);
   const lastNotifiedRef = useRef<string>("");
 
   const getSelection = (elementId: string) =>
@@ -397,6 +416,18 @@ export function FlatElementList({
     [updateSelection]
   );
 
+  const handleSelectFromLibrary = useCallback(
+    (elementId: string, item: MediaItem) => {
+      updateSelection(elementId, {
+        selectedOptionId: "custom",
+        customImageUrl: item.url,
+      });
+      setLibraryDialogElement(null);
+      toast.success("Изображение выбрано из библиотеки");
+    },
+    [updateSelection]
+  );
+
   if (!elements.length) {
     return (
       <div className="rounded-lg border border-dashed p-6 text-center">
@@ -434,11 +465,26 @@ export function FlatElementList({
             onCustomUpload={(file) => handleCustomUpload(element.id, file)}
             onRemoveCustom={() => handleRemoveCustom(element.id)}
             onSelect={(optionId) => handleSelect(element.id, optionId)}
+            onSelectFromLibrary={() => setLibraryDialogElement(element.id)}
             scenes={scenes}
             selection={getSelection(element.id)}
           />
         ))}
       </div>
+
+      <ImagePickerDialog
+        filter={{ type: "image" }}
+        onOpenChange={(open) => {
+          if (!open) setLibraryDialogElement(null);
+        }}
+        onSelect={(item) => {
+          if (libraryDialogElement) {
+            handleSelectFromLibrary(libraryDialogElement, item);
+          }
+        }}
+        open={!!libraryDialogElement}
+        title="Выберите изображение из библиотеки"
+      />
     </div>
   );
 }

@@ -955,15 +955,7 @@ reelsRouter.openapi(getReelDebugRoute, async (c) => {
       orderBy: { createdAt: "desc" },
     });
 
-    // Получаем генерации для этого рила (полные данные)
-    const generations = await prisma.videoGeneration.findMany({
-      where: {
-        analysis: { sourceId: id, sourceType: "reel" }, // Using relation filter hack, or just sourceType if schema supports
-      },
-      orderBy: { createdAt: "desc" },
-    });
-    // Fix: We need to filter generations by analysisId, where analysis.sourceId = id
-    // Optimization: we already fetched analyses.
+    // Получаем генерации для этого рила через analysisIds
     const analysisIds = analyses.map((a) => a.id);
     const relatedGenerations = await prisma.videoGeneration.findMany({
       where: { analysisId: { in: analysisIds } },
@@ -971,6 +963,38 @@ reelsRouter.openapi(getReelDebugRoute, async (c) => {
     });
 
     const generationIds = relatedGenerations.map((g) => g.id);
+
+    // Получаем scene генерации через VideoScene -> SceneGeneration
+    const sceneIds = analyses.flatMap(
+      (a) => a.videoScenes?.map((s) => s.id) || []
+    );
+    const sceneGenerations =
+      sceneIds.length > 0
+        ? await prisma.sceneGeneration.findMany({
+            where: { sceneId: { in: sceneIds } },
+            orderBy: { createdAt: "desc" },
+            include: {
+              scene: {
+                select: {
+                  index: true,
+                  startTime: true,
+                  endTime: true,
+                  duration: true,
+                  thumbnailUrl: true,
+                },
+              },
+            },
+          })
+        : [];
+
+    // Получаем composite генерации
+    const compositeGenerations =
+      analysisIds.length > 0
+        ? await prisma.compositeGeneration.findMany({
+            where: { analysisId: { in: analysisIds } },
+            orderBy: { createdAt: "desc" },
+          })
+        : [];
 
     // Получаем AI логи (Kling, OpenAI, Gemini)
     const aiLogs = await prisma.aILog.findMany({
@@ -999,6 +1023,8 @@ reelsRouter.openapi(getReelDebugRoute, async (c) => {
         analyses,
         template: reel.template,
         generations: relatedGenerations,
+        sceneGenerations,
+        compositeGenerations,
         videoUrl,
       },
       200

@@ -146,6 +146,43 @@ export type VideoGeneration = {
   lastActivityAt?: string;
 };
 
+export type SceneGeneration = {
+  id: string;
+  sceneId: string;
+  status: string;
+  prompt: string;
+  provider: string;
+  videoUrl: string | null;
+  s3Key: string | null;
+  error: string | null;
+  progress: number;
+  progressStage: string;
+  progressMessage: string;
+  createdAt: string;
+  completedAt: string | null;
+  scene?: {
+    index: number;
+    startTime: number;
+    endTime: number;
+    duration: number;
+    thumbnailUrl: string | null;
+  };
+};
+
+export type CompositeGeneration = {
+  id: string;
+  analysisId: string;
+  status: string;
+  videoUrl: string | null;
+  s3Key: string | null;
+  error: string | null;
+  progress: number;
+  progressStage: string;
+  progressMessage: string;
+  createdAt: string;
+  completedAt: string | null;
+};
+
 export type CategoryMeta = {
   name: string | null;
   count: number;
@@ -257,6 +294,7 @@ export type UploadReferenceResponse = {
   success: boolean;
   url: string;
   s3Key: string;
+  imageId: string;
 };
 
 export async function generateFromTemplate(
@@ -468,6 +506,8 @@ export type ReelDebugInfo = {
   // Source video URL for generation
   videoUrl: string | null;
   generations: VideoGeneration[];
+  sceneGenerations: SceneGeneration[];
+  compositeGenerations: CompositeGeneration[];
   // AI logs for debugging API requests/responses
   aiLogs?: AILogDetail[];
 };
