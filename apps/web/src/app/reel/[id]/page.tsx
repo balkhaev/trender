@@ -64,6 +64,8 @@ import { VideoTrimButton } from "@/components/video-trim-section";
 import { useDeleteReel } from "@/lib/hooks/use-dashboard";
 import {
   useAnalyzeReel,
+  useDeleteCompositeGeneration,
+  useDeleteGeneration,
   useDownloadReel,
   useGenerateVideo,
   useReelDebug,
@@ -188,6 +190,10 @@ export default function ReelDetailPage() {
   const { mutate: resizeReel, isPending: isResizing } = useResizeReel();
   const { mutate: resetReelStatus, isPending: isResetting } =
     useResetReelStatus();
+  const { mutate: deleteGeneration, isPending: isDeletingGeneration } =
+    useDeleteGeneration();
+  const { mutate: deleteCompositeGeneration, isPending: isDeletingComposite } =
+    useDeleteCompositeGeneration();
   const { mutate: updateTemplate, isPending: isUpdatingTemplate } = useMutation(
     {
       mutationFn: ({
@@ -298,6 +304,32 @@ export default function ReelDetailPage() {
       }
     );
   }, [data?.template, updateTemplate]);
+
+  const handleDeleteGeneration = useCallback(
+    (generationId: string) => {
+      deleteGeneration(generationId, {
+        onSuccess: () => {
+          toast.success("Генерация удалена");
+          refetch();
+        },
+        onError: (err: Error) => toast.error(err.message),
+      });
+    },
+    [deleteGeneration, refetch]
+  );
+
+  const handleDeleteComposite = useCallback(
+    (compositeId: string) => {
+      deleteCompositeGeneration(compositeId, {
+        onSuccess: () => {
+          toast.success("Генерация удалена");
+          refetch();
+        },
+        onError: (err: Error) => toast.error(err.message),
+      });
+    },
+    [deleteCompositeGeneration, refetch]
+  );
 
   const handleGenerate = useCallback(
     (prompt: string, options: KlingGenerationOptions, analysisId: string) => {
@@ -747,7 +779,9 @@ export default function ReelDetailPage() {
                       {data.compositeGenerations?.map((gen) => (
                         <CompositeGenerationCard
                           generation={gen}
+                          isDeleting={isDeletingComposite}
                           key={gen.id}
+                          onDelete={handleDeleteComposite}
                           onRegenerateScene={regenerateSceneMutation}
                           sceneGenerations={data.sceneGenerations}
                         />
@@ -763,7 +797,12 @@ export default function ReelDetailPage() {
                         Полные генерации
                       </h4>
                       {data.generations?.map((gen) => (
-                        <GenerationCard generation={gen} key={gen.id} />
+                        <GenerationCard
+                          generation={gen}
+                          isDeleting={isDeletingGeneration}
+                          key={gen.id}
+                          onDelete={handleDeleteGeneration}
+                        />
                       ))}
                     </div>
                   )}
@@ -966,7 +1005,16 @@ function StageStatCard({ stat }: { stat: StageStats }) {
   );
 }
 
-function GenerationCard({ generation }: { generation: VideoGeneration }) {
+function GenerationCard({
+  generation,
+  onDelete,
+  isDeleting,
+}: {
+  generation: VideoGeneration;
+  onDelete?: (id: string) => void;
+  isDeleting?: boolean;
+}) {
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const isActive =
     generation.status === "pending" || generation.status === "processing";
   const isCompleted = generation.status === "completed";
@@ -1004,6 +1052,11 @@ function GenerationCard({ generation }: { generation: VideoGeneration }) {
     statusConfig[generation.status as keyof typeof statusConfig] ||
     statusConfig.pending;
 
+  const handleDelete = () => {
+    onDelete?.(generation.id);
+    setDeleteDialogOpen(false);
+  };
+
   return (
     <div className="overflow-hidden rounded-xl border border-glass-border bg-card shadow-(--shadow-glass) backdrop-blur-xl">
       {/* Header */}
@@ -1031,6 +1084,45 @@ function GenerationCard({ generation }: { generation: VideoGeneration }) {
           {duration !== null ? (
             <span className="text-emerald-300">({duration}с)</span>
           ) : null}
+          {onDelete && (
+            <AlertDialog
+              onOpenChange={setDeleteDialogOpen}
+              open={deleteDialogOpen}
+            >
+              <AlertDialogTrigger asChild>
+                <Button
+                  className="ml-2 h-6 w-6"
+                  disabled={isDeleting}
+                  size="icon"
+                  variant="ghost"
+                >
+                  {isDeleting ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3 w-3 text-destructive" />
+                  )}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Удалить генерацию?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Это действие удалит генерацию и связанный видеофайл из
+                    хранилища.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Отмена</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={handleDelete}
+                  >
+                    Удалить
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </div>
       </div>
 
@@ -1144,6 +1236,8 @@ function CompositeGenerationCard({
   generation,
   sceneGenerations,
   onRegenerateScene,
+  onDelete,
+  isDeleting,
 }: {
   generation: CompositeGeneration;
   sceneGenerations?: SceneGeneration[];
@@ -1152,8 +1246,11 @@ function CompositeGenerationCard({
     prompt?: string;
     useGeneratedAsSource?: boolean;
   }) => void;
+  onDelete?: (id: string) => void;
+  isDeleting?: boolean;
 }) {
   const [regenerateDialogOpen, setRegenerateDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [regenerateSceneId, setRegenerateSceneId] = useState<string | null>(
     null
   );
@@ -1245,6 +1342,11 @@ function CompositeGenerationCard({
   const getSceneGeneration = (generationId?: string) =>
     sceneGenerations?.find((sg) => sg.id === generationId);
 
+  const handleDelete = () => {
+    onDelete?.(generation.id);
+    setDeleteDialogOpen(false);
+  };
+
   return (
     <div className="overflow-hidden rounded-xl border border-glass-border bg-card shadow-(--shadow-glass) backdrop-blur-xl">
       <div className="flex items-center justify-between border-glass-border border-b bg-surface-2 px-4 py-2">
@@ -1271,6 +1373,45 @@ function CompositeGenerationCard({
           {new Date(generation.createdAt).toLocaleString("ru-RU")}
           {duration !== null && (
             <span className="text-emerald-300">({duration}с)</span>
+          )}
+          {onDelete && (
+            <AlertDialog
+              onOpenChange={setDeleteDialogOpen}
+              open={deleteDialogOpen}
+            >
+              <AlertDialogTrigger asChild>
+                <Button
+                  className="ml-2 h-6 w-6"
+                  disabled={isDeleting}
+                  size="icon"
+                  variant="ghost"
+                >
+                  {isDeleting ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-3 w-3 text-destructive" />
+                  )}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Удалить генерацию?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Это действие удалит составную генерацию, все связанные
+                    генерации сцен и видеофайлы.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Отмена</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    onClick={handleDelete}
+                  >
+                    Удалить
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           )}
         </div>
       </div>

@@ -1,107 +1,24 @@
-export type VideoAnalysis = {
-  action: string;
-  subject: string;
-  environment: string;
-  cameraWork: string;
-  lighting: string;
-  colorPalette: string;
-  style: string;
-  pacing: string;
-  veo3Prompt: string;
+import type {
+  Reel,
+  ReelLog,
+  VideoAnalysis,
+  VideoAnalysisWithId,
+  VideoGeneration,
+  VideoProvider,
+} from "@trender/types";
+import { API_URL } from "./api-client";
+
+export { formatFullVeo3Prompt } from "@trender/types";
+
+// Re-export types for backwards compatibility
+export type {
+  Reel,
+  ReelLog,
+  VideoAnalysis,
+  VideoAnalysisWithId,
+  VideoGeneration,
+  VideoProvider,
 };
-
-export type VideoAnalysisWithId = VideoAnalysis & {
-  id: string;
-  sourceType: string;
-  sourceId?: string;
-  fileName?: string;
-  createdAt: string;
-};
-
-export type VideoProvider = "veo3" | "sora2" | "kling";
-
-export type VideoGeneration = {
-  id: string;
-  analysisId: string;
-  provider: VideoProvider;
-  status: "pending" | "processing" | "completed" | "failed";
-  prompt: string;
-  videoUrl?: string;
-  thumbnailUrl?: string;
-  durationSec?: number;
-  error?: string;
-  createdAt: string;
-  updatedAt: string;
-  completedAt?: string;
-  // Progress tracking
-  progress: number;
-  progressStage: string;
-  progressMessage: string;
-  klingProgress?: number;
-  lastActivityAt?: string;
-};
-
-export type ReelLog = {
-  id: string;
-  level: "debug" | "info" | "warn" | "error";
-  stage: string;
-  message: string;
-  createdAt: string;
-};
-
-export type Reel = {
-  id: string;
-  url: string;
-  videoUrl?: string;
-  thumbnailUrl?: string;
-  caption?: string;
-  author?: string;
-  viewCount?: number;
-  likeCount?: number;
-  commentCount?: number;
-  hashtag?: string;
-  source: string;
-  status:
-    | "scraped"
-    | "downloading"
-    | "downloaded"
-    | "analyzing"
-    | "analyzed"
-    | "failed";
-  localPath?: string;
-  s3Key?: string;
-  errorMessage?: string;
-  // Progress tracking
-  progress: number;
-  progressStage: string;
-  progressMessage: string;
-  lastActivityAt?: string;
-  // Optional logs
-  recentLogs?: ReelLog[];
-  scrapedAt: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-/**
- * Генерирует компактный промпт для Veo3.
- * Только самая важная информация в формате, который Veo3 понимает лучше всего.
- */
-export function formatFullVeo3Prompt(analysis: VideoAnalysis): string {
-  // Основной промпт уже содержит всё необходимое
-  // Добавляем только критичные детали, которые могут быть потеряны
-  const parts = [
-    analysis.veo3Prompt,
-    "",
-    "---",
-    `Camera: ${analysis.cameraWork}`,
-    `Lighting: ${analysis.lighting}`,
-    `Color grade: ${analysis.colorPalette}`,
-    `Style: ${analysis.style}, ${analysis.pacing}`,
-  ];
-
-  return parts.join("\n");
-}
 
 type AnalyzeVideoResponse = {
   success: boolean;
@@ -134,8 +51,6 @@ type GenerationsListResponse = {
   generations: VideoGeneration[];
   total: number;
 };
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 export type AnalyzeVideoResult = {
   analysis: VideoAnalysis;

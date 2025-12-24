@@ -2,25 +2,9 @@ import OpenAI from "openai";
 import { ai, timeouts } from "../config";
 import { aiLogger } from "./ai-logger";
 import type { DetectableElement, RemixOption } from "./gemini";
+import { withTimeout } from "./utils";
 
 const openaiConfig = ai.openai;
-
-/**
- * Обёртка для Promise с таймаутом
- */
-async function withTimeout<T>(
-  promise: Promise<T>,
-  ms: number,
-  operation: string
-): Promise<T> {
-  const timeout = new Promise<never>((_, reject) =>
-    setTimeout(
-      () => reject(new Error(`${operation} timeout: превышено ${ms / 1000}с`)),
-      ms
-    )
-  );
-  return Promise.race([promise, timeout]);
-}
 
 // Элемент без вариантов (для передачи в ChatGPT)
 export type ElementWithoutOptions = Omit<DetectableElement, "remixOptions">;
@@ -81,8 +65,6 @@ RULES:
 - Concrete visual descriptions, no abstract language
 - Return ONLY valid JSON array
 `;
-
-const JSON_REGEX = /\[[\s\S]*\]/;
 
 const ENHANCE_PROMPT_FOR_KLING = `
 You are an expert at writing prompts for Kling AI video generation.
@@ -252,12 +234,14 @@ export class OpenAIService {
         throw new Error("Empty response from ChatGPT");
       }
 
-      const jsonMatch = content.match(JSON_REGEX);
-      if (!jsonMatch) {
-        throw new Error("Failed to parse ChatGPT response as JSON array");
+      const parseResult = extractJsonArray<EnchantingResult>(content);
+      if (!parseResult.success) {
+        throw new Error(
+          `Failed to parse ChatGPT response: ${parseResult.error}`
+        );
       }
 
-      const results = JSON.parse(jsonMatch[0]) as EnchantingResult[];
+      const results = parseResult.data;
 
       // Валидация результатов
       for (const result of results) {

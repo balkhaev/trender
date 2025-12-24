@@ -99,6 +99,7 @@
         "@tanstack/react-form": "^1.27.3",
         "@tanstack/react-query": "^5.90.12",
         "@trender/auth": "workspace:*",
+        "@trender/types": "workspace:*",
         "babel-plugin-react-compiler": "^1.0.0",
         "better-auth": "catalog:",
         "class-variance-authority": "^0.7.1",
@@ -166,6 +167,20 @@
       "devDependencies": {
         "@trender/config": "workspace:*",
         "@types/pg": "^8.15.6",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/types": {
+      "name": "@trender/types",
+      "devDependencies": {
+        "@trender/config": "workspace:*",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/utils": {
+      "name": "@trender/utils",
+      "devDependencies": {
+        "@trender/config": "workspace:*",
         "typescript": "catalog:",
       },
     },
@@ -812,6 +827,10 @@
     "@trender/playwright": ["@trender/playwright@workspace:apps/playwright"],
 
     "@trender/scrapper": ["@trender/scrapper@workspace:apps/scrapper"],
+
+    "@trender/types": ["@trender/types@workspace:packages/types"],
+
+    "@trender/utils": ["@trender/utils@workspace:packages/utils"],
 
     "@trender/video-frames": ["@trender/video-frames@workspace:apps/video-frames"],
 

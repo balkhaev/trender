@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+import { API_URL } from "./api-client";
 
 // Types
 export type TemplateReel = {
@@ -919,6 +919,45 @@ export async function regenerateScene(
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.error || "Failed to regenerate scene");
+  }
+
+  return response.json();
+}
+
+// ===== Delete Generation API =====
+
+/**
+ * Удалить VideoGeneration
+ */
+export async function deleteGeneration(generationId: string): Promise<void> {
+  const response = await fetch(`${API_URL}/api/generate/${generationId}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to delete generation");
+  }
+}
+
+/**
+ * Удалить CompositeGeneration и связанные SceneGeneration
+ */
+export async function deleteCompositeGeneration(
+  compositeId: string
+): Promise<{ deletedScenes: number }> {
+  const response = await fetch(
+    `${API_URL}/api/generate/composite/${compositeId}`,
+    {
+      method: "DELETE",
+      credentials: "include",
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to delete composite generation");
   }
 
   return response.json();

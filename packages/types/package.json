@@ -1,0 +1,25 @@
+{
+  "name": "@trender/types",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./job": {
+      "default": "./src/job.ts"
+    },
+    "./reel": {
+      "default": "./src/reel.ts"
+    },
+    "./video": {
+      "default": "./src/video.ts"
+    },
+    "./template": {
+      "default": "./src/template.ts"
+    }
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "@trender/config": "workspace:*"
+  }
+}

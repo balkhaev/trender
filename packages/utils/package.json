@@ -1,0 +1,16 @@
+{
+  "name": "@trender/utils",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./tags": {
+      "default": "./src/tags.ts"
+    }
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "@trender/config": "workspace:*"
+  }
+}

@@ -22,6 +22,14 @@ import {
   uploadPipelineVideo,
 } from "../reels-api";
 
+// Re-export hooks from use-templates for backwards compatibility
+export {
+  useAnalyzeReel,
+  useAnalyzeReelByFrames,
+  useDownloadReel,
+  useProcessReel,
+} from "./use-templates";
+
 export function useReelStats() {
   return useQuery<ReelStats>({
     queryKey: ["reelStats"],
@@ -61,105 +69,6 @@ export function useStartScrape() {
     mutationFn: (request: ScrapeRequest) => startScrape(request),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["scrapeJobs"] });
-    },
-  });
-}
-
-export function useProcessReel() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (reelId: string) => {
-      const API_URL =
-        process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const response = await fetch(`${API_URL}/api/reels/${reelId}/process`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-        credentials: "include",
-      });
-      if (!response.ok) {
-        throw new Error("Failed to process reel");
-      }
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["reels"] });
-      queryClient.invalidateQueries({ queryKey: ["reelStats"] });
-    },
-  });
-}
-
-export function useDownloadReel() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (reelId: string) => {
-      const API_URL =
-        process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const response = await fetch(`${API_URL}/api/reels/${reelId}/download`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!response.ok) {
-        throw new Error("Failed to download reel");
-      }
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["reels"] });
-      queryClient.invalidateQueries({ queryKey: ["reelStats"] });
-    },
-  });
-}
-
-export function useAnalyzeReel() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (reelId: string) => {
-      const API_URL =
-        process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const response = await fetch(`${API_URL}/api/reels/${reelId}/analyze`, {
-        method: "POST",
-        credentials: "include",
-      });
-      if (!response.ok) {
-        throw new Error("Failed to analyze reel");
-      }
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["reels"] });
-      queryClient.invalidateQueries({ queryKey: ["reelStats"] });
-      queryClient.invalidateQueries({ queryKey: ["templates"] });
-    },
-  });
-}
-
-export function useAnalyzeReelByFrames() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (reelId: string) => {
-      const API_URL =
-        process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
-      const response = await fetch(
-        `${API_URL}/api/reels/${reelId}/analyze-frames`,
-        {
-          method: "POST",
-          credentials: "include",
-        }
-      );
-      if (!response.ok) {
-        throw new Error("Failed to analyze reel by frames");
-      }
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["reels"] });
-      queryClient.invalidateQueries({ queryKey: ["reelStats"] });
-      queryClient.invalidateQueries({ queryKey: ["templates"] });
     },
   });
 }
@@ -264,16 +173,12 @@ export function useBatchResizeAll() {
 
   return useMutation({
     mutationFn: async () => {
-      const API_URL =
-        process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
       // Получаем все рилы с видео
-      const reelsResponse = await fetch(
-        `${API_URL}/api/reels/saved?limit=100`,
-        {
-          credentials: "include",
-        }
-      );
+      const reelsResponse = await fetch(`${apiUrl}/api/reels/saved?limit=100`, {
+        credentials: "include",
+      });
 
       if (!reelsResponse.ok) {
         throw new Error("Failed to get reels");
@@ -292,7 +197,7 @@ export function useBatchResizeAll() {
       }
 
       // Отправляем на батч-ресайз
-      const resizeResponse = await fetch(`${API_URL}/api/reels/batch-resize`, {
+      const resizeResponse = await fetch(`${apiUrl}/api/reels/batch-resize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reelIds }),

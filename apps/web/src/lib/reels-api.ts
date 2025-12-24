@@ -1,31 +1,14 @@
-export type SortMode = "top" | "recent";
-export type JobStatus = "pending" | "running" | "completed" | "failed";
+import type {
+  JobProgress,
+  JobStatus,
+  ScrapeRequest,
+  ScrapeResponse,
+  SortMode,
+} from "@trender/types";
+import { API_URL } from "./api-client";
 
-export type JobProgress = {
-  scraped: number;
-  downloaded: number;
-  total: number;
-  scanned: number;
-  found: number;
-  currentReelId?: string;
-  currentLikes?: number;
-  lastFoundReel?: {
-    id: string;
-    likes: number;
-  };
-};
-
-export type ScrapeRequest = {
-  limit?: number;
-  sort?: SortMode;
-  minLikes?: number;
-};
-
-export type ScrapeResponse = {
-  jobId: string;
-  status: JobStatus;
-  message: string;
-};
+// Re-export types for backwards compatibility
+export type { JobProgress, JobStatus, SortMode, ScrapeRequest, ScrapeResponse };
 
 export type JobStatusResponse = {
   id: string;
@@ -50,8 +33,6 @@ export type JobListItem = {
 };
 
 export type DownloadsResponse = Record<string, string[]>;
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000";
 
 export async function startScrape(
   request: ScrapeRequest

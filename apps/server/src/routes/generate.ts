@@ -1007,4 +1007,197 @@ app.openapi(regenerateSceneRoute, async (c) => {
   );
 });
 
+// ============================================
+// DELETE /{generationId} - Delete VideoGeneration
+// ============================================
+
+const deleteGenerationRoute = createRoute({
+  method: "delete",
+  path: "/{generationId}",
+  summary: "Delete video generation",
+  tags: ["Generate"],
+  description: "Delete a video generation and its S3 file.",
+  request: {
+    params: z.object({
+      generationId: z.string().openapi({ description: "Generation ID" }),
+    }),
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.boolean(),
+          }),
+        },
+      },
+      description: "Generation deleted",
+    },
+    404: {
+      content: {
+        "application/json": {
+          schema: NotFoundResponseSchema,
+        },
+      },
+      description: "Generation not found",
+    },
+  },
+});
+
+app.openapi(deleteGenerationRoute, async (c) => {
+  const { generationId } = c.req.valid("param");
+
+  const generation = await prisma.videoGeneration.findUnique({
+    where: { id: generationId },
+  });
+
+  if (!generation) {
+    return c.json({ error: "Generation not found" }, 404);
+  }
+
+  // Delete S3 file if exists
+  if (generation.s3Key) {
+    try {
+      const { s3Service: s3 } = await import("../services/s3");
+      await s3.deleteFile(generation.s3Key);
+      console.log(`[Delete] Deleted S3 file: ${generation.s3Key}`);
+    } catch (error) {
+      console.error(
+        `[Delete] Failed to delete S3 file: ${generation.s3Key}`,
+        error
+      );
+    }
+  }
+
+  // Delete DB record
+  await prisma.videoGeneration.delete({
+    where: { id: generationId },
+  });
+
+  console.log(`[Delete] Deleted VideoGeneration: ${generationId}`);
+
+  return c.json({ success: true }, 200);
+});
+
+// ============================================
+// DELETE /composite/{compositeId} - Delete CompositeGeneration
+// ============================================
+
+const deleteCompositeRoute = createRoute({
+  method: "delete",
+  path: "/composite/{compositeId}",
+  summary: "Delete composite generation",
+  tags: ["Generate"],
+  description:
+    "Delete a composite generation and all related scene generations with their S3 files.",
+  request: {
+    params: z.object({
+      compositeId: z
+        .string()
+        .openapi({ description: "Composite Generation ID" }),
+    }),
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.boolean(),
+            deletedScenes: z.number(),
+          }),
+        },
+      },
+      description: "Composite generation deleted",
+    },
+    404: {
+      content: {
+        "application/json": {
+          schema: NotFoundResponseSchema,
+        },
+      },
+      description: "Composite generation not found",
+    },
+  },
+});
+
+app.openapi(deleteCompositeRoute, async (c) => {
+  const { compositeId } = c.req.valid("param");
+
+  const composite = await prisma.compositeGeneration.findUnique({
+    where: { id: compositeId },
+  });
+
+  if (!composite) {
+    return c.json({ error: "Composite generation not found" }, 404);
+  }
+
+  // Get scene generation IDs from sceneConfig
+  const sceneConfig =
+    (composite.sceneConfig as Array<{
+      sceneId: string;
+      generationId?: string;
+      useOriginal: boolean;
+    }>) || [];
+
+  const sceneGenerationIds = sceneConfig
+    .filter((s) => !s.useOriginal && s.generationId)
+    .map((s) => s.generationId as string);
+
+  // Get scene generations to delete their S3 files
+  const sceneGenerations = await prisma.sceneGeneration.findMany({
+    where: { id: { in: sceneGenerationIds } },
+  });
+
+  const { s3Service: s3 } = await import("../services/s3");
+
+  // Delete S3 files for scene generations
+  for (const sceneGen of sceneGenerations) {
+    if (sceneGen.s3Key) {
+      try {
+        await s3.deleteFile(sceneGen.s3Key);
+        console.log(`[Delete] Deleted scene S3 file: ${sceneGen.s3Key}`);
+      } catch (error) {
+        console.error(
+          `[Delete] Failed to delete scene S3 file: ${sceneGen.s3Key}`,
+          error
+        );
+      }
+    }
+  }
+
+  // Delete S3 file for composite
+  if (composite.s3Key) {
+    try {
+      await s3.deleteFile(composite.s3Key);
+      console.log(`[Delete] Deleted composite S3 file: ${composite.s3Key}`);
+    } catch (error) {
+      console.error(
+        `[Delete] Failed to delete composite S3 file: ${composite.s3Key}`,
+        error
+      );
+    }
+  }
+
+  // Delete scene generations from DB
+  if (sceneGenerationIds.length > 0) {
+    await prisma.sceneGeneration.deleteMany({
+      where: { id: { in: sceneGenerationIds } },
+    });
+  }
+
+  // Delete composite generation from DB
+  await prisma.compositeGeneration.delete({
+    where: { id: compositeId },
+  });
+
+  console.log(
+    `[Delete] Deleted CompositeGeneration: ${compositeId} with ${sceneGenerationIds.length} scene generations`
+  );
+
+  return c.json(
+    { success: true, deletedScenes: sceneGenerationIds.length },
+    200
+  );
+});
+
 export { app as generateRouter };

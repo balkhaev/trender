@@ -367,3 +367,33 @@ export function useToggleBookmark() {
     },
   });
 }
+
+// ===== Delete Generation Hooks =====
+
+export function useDeleteGeneration() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (generationId: string) =>
+      import("../templates-api").then((m) => m.deleteGeneration(generationId)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["reel-debug"] });
+      queryClient.invalidateQueries({ queryKey: ["template-generations"] });
+    },
+  });
+}
+
+export function useDeleteCompositeGeneration() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (compositeId: string) =>
+      import("../templates-api").then((m) =>
+        m.deleteCompositeGeneration(compositeId)
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["reel-debug"] });
+      queryClient.invalidateQueries({ queryKey: ["template-generations"] });
+    },
+  });
+}
