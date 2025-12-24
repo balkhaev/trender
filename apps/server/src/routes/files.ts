@@ -9,7 +9,76 @@ import {
   NotFoundResponseSchema,
 } from "../schemas";
 import { getGenerationsPath } from "../services/queues/video-gen-queue";
-import { getS3Key, s3Service } from "../services/s3";
+import { getS3Key, type RangeStreamResult, s3Service } from "../services/s3";
+
+/**
+ * Helper to create video response with Range support (required for iOS)
+ */
+function createVideoResponse(
+  result: RangeStreamResult,
+  filename: string,
+  rangeHeader?: string
+): Response {
+  const headers: Record<string, string> = {
+    "Content-Type": result.metadata.contentType,
+    "Content-Length": result.metadata.contentLength.toString(),
+    "Accept-Ranges": "bytes",
+    "Cache-Control": "public, max-age=31536000, immutable",
+    "Content-Disposition": `inline; filename="${filename}"`,
+  };
+
+  // If Range was requested, return 206 Partial Content
+  if (rangeHeader) {
+    headers["Content-Range"] =
+      `bytes ${result.range.start}-${result.range.end}/${result.range.total}`;
+    return new Response(result.stream, { status: 206, headers });
+  }
+
+  return new Response(result.stream, { headers });
+}
+
+/**
+ * Helper to create video response from local file with Range support
+ */
+async function createLocalVideoResponse(
+  filePath: string,
+  filename: string,
+  rangeHeader?: string
+): Promise<Response> {
+  const fileStat = await stat(filePath);
+  const totalSize = fileStat.size;
+
+  let start = 0;
+  let end = totalSize - 1;
+
+  if (rangeHeader) {
+    const match = rangeHeader.match(/bytes=(\d*)-(\d*)/);
+    if (match) {
+      start = match[1] ? Number.parseInt(match[1], 10) : 0;
+      end = match[2] ? Number.parseInt(match[2], 10) : totalSize - 1;
+      end = Math.min(end, totalSize - 1);
+    }
+  }
+
+  const chunkSize = end - start + 1;
+  const fileStream = createReadStream(filePath, { start, end });
+  const webStream = Readable.toWeb(fileStream) as unknown as ReadableStream;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "video/mp4",
+    "Content-Length": chunkSize.toString(),
+    "Accept-Ranges": "bytes",
+    "Cache-Control": "public, max-age=31536000, immutable",
+    "Content-Disposition": `inline; filename="${filename}"`,
+  };
+
+  if (rangeHeader) {
+    headers["Content-Range"] = `bytes ${start}-${end}/${totalSize}`;
+    return new Response(webStream, { status: 206, headers });
+  }
+
+  return new Response(webStream, { headers });
+}
 
 const filesRouter = new OpenAPIHono();
 
@@ -214,6 +283,7 @@ function extractIdFromFilename(filename: string): string {
 filesRouter.openapi(streamReelRoute, async (c) => {
   const { filename } = c.req.valid("param");
   const id = extractIdFromFilename(filename);
+  const rangeHeader = c.req.header("Range");
 
   // Look up reel to get s3Key
   const reel = await prisma.reel.findUnique({
@@ -229,20 +299,13 @@ filesRouter.openapi(streamReelRoute, async (c) => {
   const s3Key = reel.s3Key || getS3Key("reels", id);
 
   try {
-    const result = await s3Service.getFileStream(s3Key);
+    const result = await s3Service.getFileStreamWithRange(s3Key, rangeHeader);
 
     if (!result) {
       return c.json({ error: "Video file not found in storage" }, 404);
     }
 
-    return new Response(result.stream, {
-      headers: {
-        "Content-Type": result.metadata.contentType,
-        "Content-Length": result.metadata.contentLength.toString(),
-        "Cache-Control": "public, max-age=31536000, immutable",
-        "Content-Disposition": `inline; filename="${id}.mp4"`,
-      },
-    });
+    return createVideoResponse(result, `${id}.mp4`, rangeHeader);
   } catch (error) {
     console.error(`Error streaming reel ${id}:`, error);
     return c.json({ error: "Failed to stream video" }, 500);
@@ -274,6 +337,7 @@ filesRouter.openapi(headReelRoute, async (c) => {
     return c.body(null, 200, {
       "Content-Type": metadata.contentType,
       "Content-Length": metadata.contentLength.toString(),
+      "Accept-Ranges": "bytes",
     });
   } catch {
     return c.body(null, 500);
@@ -283,6 +347,7 @@ filesRouter.openapi(headReelRoute, async (c) => {
 filesRouter.openapi(streamGenerationRoute, async (c) => {
   const { filename } = c.req.valid("param");
   const id = extractIdFromFilename(filename);
+  const rangeHeader = c.req.header("Range");
 
   // Look up generation to get s3Key
   const generation = await prisma.videoGeneration.findUnique({
@@ -302,16 +367,12 @@ filesRouter.openapi(streamGenerationRoute, async (c) => {
   // Try S3 first if s3Key exists
   if (generation.s3Key) {
     try {
-      const result = await s3Service.getFileStream(generation.s3Key);
+      const result = await s3Service.getFileStreamWithRange(
+        generation.s3Key,
+        rangeHeader
+      );
       if (result) {
-        return new Response(result.stream, {
-          headers: {
-            "Content-Type": result.metadata.contentType,
-            "Content-Length": result.metadata.contentLength.toString(),
-            "Cache-Control": "public, max-age=31536000, immutable",
-            "Content-Disposition": `inline; filename="${id}.mp4"`,
-          },
-        });
+        return createVideoResponse(result, `${id}.mp4`, rangeHeader);
       }
       console.log(`[Files] S3 file not found: ${generation.s3Key}`);
     } catch (s3Error) {
@@ -324,18 +385,11 @@ filesRouter.openapi(streamGenerationRoute, async (c) => {
   if (existsSync(localPath)) {
     console.log(`[Files] Serving from local: ${localPath}`);
     try {
-      const fileStat = await stat(localPath);
-      const fileStream = createReadStream(localPath);
-      const webStream = Readable.toWeb(fileStream) as unknown as ReadableStream;
-
-      return new Response(webStream, {
-        headers: {
-          "Content-Type": "video/mp4",
-          "Content-Length": fileStat.size.toString(),
-          "Cache-Control": "public, max-age=31536000, immutable",
-          "Content-Disposition": `inline; filename="${id}.mp4"`,
-        },
-      });
+      return await createLocalVideoResponse(
+        localPath,
+        `${id}.mp4`,
+        rangeHeader
+      );
     } catch (localError) {
       console.error(`[Files] Local file error for ${id}:`, localError);
     }
@@ -379,6 +433,7 @@ filesRouter.openapi(headGenerationRoute, async (c) => {
     return c.body(null, 200, {
       "Content-Type": metadata.contentType,
       "Content-Length": metadata.contentLength.toString(),
+      "Accept-Ranges": "bytes",
     });
   } catch {
     return c.body(null, 500);

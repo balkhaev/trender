@@ -82,6 +82,16 @@ export type FileMetadata = {
   lastModified: Date | undefined;
 };
 
+export type RangeStreamResult = {
+  stream: ReadableStream;
+  metadata: FileMetadata;
+  range: {
+    start: number;
+    end: number;
+    total: number;
+  };
+};
+
 class S3Service {
   /**
    * Upload a file to S3
@@ -227,6 +237,82 @@ class S3Service {
           contentLength: response.ContentLength ?? 0,
           contentType: response.ContentType ?? "application/octet-stream",
           lastModified: response.LastModified,
+        },
+      };
+    } catch (error) {
+      if (this.isNotFoundError(error)) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Stream a file from S3 with Range support (for iOS video playback)
+   * @param key - S3 key
+   * @param rangeHeader - HTTP Range header value (e.g., "bytes=0-1000")
+   */
+  async getFileStreamWithRange(
+    key: string,
+    rangeHeader?: string
+  ): Promise<RangeStreamResult | null> {
+    const client = getS3Client();
+
+    try {
+      // First get file metadata to know total size
+      const metadata = await this.getFileMetadata(key);
+      if (!metadata) {
+        return null;
+      }
+
+      const totalSize = metadata.contentLength;
+      let start = 0;
+      let end = totalSize - 1;
+
+      // Parse Range header if provided
+      if (rangeHeader) {
+        const match = rangeHeader.match(/bytes=(\d*)-(\d*)/);
+        if (match) {
+          const rangeStart = match[1] ? Number.parseInt(match[1], 10) : 0;
+          const rangeEnd = match[2]
+            ? Number.parseInt(match[2], 10)
+            : totalSize - 1;
+
+          // Validate range
+          if (rangeStart >= totalSize) {
+            return null; // Range not satisfiable
+          }
+
+          start = rangeStart;
+          end = Math.min(rangeEnd, totalSize - 1);
+        }
+      }
+
+      const command = new GetObjectCommand({
+        Bucket: s3Config.bucket,
+        Key: key,
+        Range: `bytes=${start}-${end}`,
+      });
+
+      const response = await client.send(command);
+
+      if (!response.Body) {
+        return null;
+      }
+
+      const stream = response.Body.transformToWebStream();
+
+      return {
+        stream,
+        metadata: {
+          contentLength: end - start + 1,
+          contentType: metadata.contentType,
+          lastModified: metadata.lastModified,
+        },
+        range: {
+          start,
+          end,
+          total: totalSize,
         },
       };
     } catch (error) {

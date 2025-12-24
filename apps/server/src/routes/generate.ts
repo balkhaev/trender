@@ -149,7 +149,8 @@ app.openapi(generateRoute, async (c) => {
           return c.json({ error: `Element not found: ${sel.elementId}` }, 400);
         }
 
-        if (sel.optionId) {
+        // "custom" - специальное значение для кастомного изображения
+        if (sel.optionId && sel.optionId !== "custom") {
           const element = elements.find((e) => e.id === sel.elementId);
           const remixOptions = element?.remixOptions || [];
           if (!remixOptions.some((opt) => opt.id === sel.optionId)) {
@@ -160,6 +161,16 @@ app.openapi(generateRoute, async (c) => {
               400
             );
           }
+        }
+
+        // Если optionId === "custom", должен быть customImageUrl
+        if (sel.optionId === "custom" && !sel.customImageUrl) {
+          return c.json(
+            {
+              error: `customImageUrl is required when optionId is "custom" for element ${sel.elementId}`,
+            },
+            400
+          );
         }
       }
     }

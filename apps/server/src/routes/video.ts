@@ -992,6 +992,7 @@ video.openapi(getGenerationLogsRoute, async (c) => {
 video.openapi(downloadGenerationRoute, async (c) => {
   try {
     const { id } = c.req.valid("param");
+    const rangeHeader = c.req.header("Range");
 
     const generation = await prisma.videoGeneration.findUnique({
       where: { id },
@@ -1009,16 +1010,38 @@ video.openapi(downloadGenerationRoute, async (c) => {
 
     if (generation.s3Key) {
       try {
-        const result = await s3Service.getFileStream(generation.s3Key);
-        if (result) {
-          return new Response(result.stream, {
-            headers: {
+        const metadata = await s3Service.getFileMetadata(generation.s3Key);
+        if (metadata) {
+          const totalSize = metadata.contentLength;
+          let start = 0;
+          let end = totalSize - 1;
+
+          if (rangeHeader) {
+            const match = rangeHeader.match(/bytes=(\d*)-(\d*)/);
+            if (match) {
+              start = match[1] ? Number.parseInt(match[1], 10) : 0;
+              end = match[2] ? Number.parseInt(match[2], 10) : totalSize - 1;
+              end = Math.min(end, totalSize - 1);
+            }
+          }
+
+          const result = await s3Service.getFileStream(generation.s3Key);
+          if (result) {
+            const headers: Record<string, string> = {
               "Content-Type": result.metadata.contentType,
-              "Content-Length": result.metadata.contentLength.toString(),
+              "Content-Length": (end - start + 1).toString(),
               "Content-Disposition": `inline; filename="${filename}"`,
               "Cache-Control": "public, max-age=31536000",
-            },
-          });
+              "Accept-Ranges": "bytes",
+            };
+
+            if (rangeHeader) {
+              headers["Content-Range"] = `bytes ${start}-${end}/${totalSize}`;
+              return new Response(result.stream, { status: 206, headers });
+            }
+
+            return new Response(result.stream, { headers });
+          }
         }
       } catch (s3Error) {
         console.error("S3 download failed, trying local:", s3Error);
@@ -1035,16 +1058,36 @@ video.openapi(downloadGenerationRoute, async (c) => {
     }
 
     const fileStat = await stat(filepath);
-    const file = Bun.file(filepath);
+    const totalSize = fileStat.size;
+    let start = 0;
+    let end = totalSize - 1;
 
-    return new Response(file, {
-      headers: {
-        "Content-Type": "video/mp4",
-        "Content-Disposition": `inline; filename="${filename}"`,
-        "Content-Length": fileStat.size.toString(),
-        "Cache-Control": "public, max-age=31536000",
-      },
-    });
+    if (rangeHeader) {
+      const match = rangeHeader.match(/bytes=(\d*)-(\d*)/);
+      if (match) {
+        start = match[1] ? Number.parseInt(match[1], 10) : 0;
+        end = match[2] ? Number.parseInt(match[2], 10) : totalSize - 1;
+        end = Math.min(end, totalSize - 1);
+      }
+    }
+
+    const file = Bun.file(filepath);
+    const slice = file.slice(start, end + 1);
+
+    const headers: Record<string, string> = {
+      "Content-Type": "video/mp4",
+      "Content-Disposition": `inline; filename="${filename}"`,
+      "Content-Length": (end - start + 1).toString(),
+      "Cache-Control": "public, max-age=31536000",
+      "Accept-Ranges": "bytes",
+    };
+
+    if (rangeHeader) {
+      headers["Content-Range"] = `bytes ${start}-${end}/${totalSize}`;
+      return new Response(slice, { status: 206, headers });
+    }
+
+    return new Response(file, { headers });
   } catch (error) {
     console.error("Download generation error:", error);
 
