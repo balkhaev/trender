@@ -174,7 +174,12 @@ export function VideoGenerator({
       }));
 
     try {
-      const result = await generate(analysis.id, apiSelections, keepAudio);
+      const result = await generate(analysis.id, {
+        selections: apiSelections,
+        keepAudio,
+        duration: duration as 5 | 10,
+        aspectRatio,
+      });
 
       if (result.type === "composite") {
         toast.success("Генерация по сценам запущена");
@@ -184,7 +189,15 @@ export function VideoGenerator({
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Ошибка генерации");
     }
-  }, [sourceVideoUrl, analysis, canGenerateNow, elementSelections, keepAudio]);
+  }, [
+    sourceVideoUrl,
+    analysis,
+    canGenerateNow,
+    elementSelections,
+    keepAudio,
+    duration,
+    aspectRatio,
+  ]);
 
   return (
     <Card className="border-violet-500/20 bg-linear-to-br from-violet-500/5 to-transparent">

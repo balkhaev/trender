@@ -287,6 +287,43 @@ def trim_video_ffmpeg(
     return True
 
 
+def normalize_video_par(video_path: str, output_path: str) -> bool:
+    """
+    Normalize video Pixel Aspect Ratio to 1:1 (square pixels).
+    Required for PySceneDetect which fails on non-square PAR videos.
+
+    Args:
+        video_path: Path to input video file
+        output_path: Path for output normalized video
+
+    Returns:
+        True if successful
+    """
+    cmd = [
+        "ffmpeg",
+        "-i", video_path,
+        "-vf", "setsar=1:1,scale=iw:ih",
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-c:a", "copy",
+        "-movflags", "+faststart",
+        output_path,
+        "-y"
+    ]
+
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=300
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(f"FFmpeg PAR normalization failed: {result.stderr}")
+
+    return True
+
+
 def detect_scenes_pyscene(
     video_path: str,
     threshold: float = 27.0,
@@ -461,7 +498,7 @@ def extend_video_with_black(
         "-f", "lavfi",
         "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
         "-filter_complex",
-        f"[1:v][2:a]atrim=0:{extension_duration}[black_audio];[0:v][0:a][1:v][black_audio]concat=n=2:v=1:a=1[outv][outa]",
+        f"[2:a]atrim=0:{extension_duration}[black_audio];[0:v][0:a][1:v][black_audio]concat=n=2:v=1:a=1[outv][outa]",
         "-map", "[outv]",
         "-map", "[outa]",
         "-c:v", "libx264",
@@ -924,6 +961,7 @@ async def detect_scenes(
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             video_path = os.path.join(tmpdir, "input_video.mp4")
+            normalized_path = os.path.join(tmpdir, "normalized_video.mp4")
 
             # Write video to temp file
             content = await video.read()
@@ -933,9 +971,17 @@ async def detect_scenes(
             # Get video duration
             duration = get_video_duration(video_path)
 
+            # Normalize PAR to 1:1 (required for PySceneDetect)
+            try:
+                normalize_video_par(video_path, normalized_path)
+                scene_video_path = normalized_path
+            except RuntimeError:
+                # Fallback to original if normalization fails
+                scene_video_path = video_path
+
             # Detect scenes
             scene_list = detect_scenes_pyscene(
-                video_path,
+                scene_video_path,
                 threshold=threshold,
                 min_scene_len_sec=min_scene_len
             )

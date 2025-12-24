@@ -853,23 +853,33 @@ export type CompositeStatus = {
 };
 
 /**
+ * Опции для генерации видео
+ */
+export type GenerateOptions = {
+  selections?: ElementSelection[];
+  keepAudio?: boolean;
+  duration?: 5 | 10;
+  aspectRatio?: "16:9" | "9:16" | "1:1" | "auto";
+};
+
+/**
  * Запустить генерацию видео
  * @param analysisId - ID анализа видео
- * @param selections - Какие элементы на что заменить
- * @param keepAudio - Сохранить аудио из оригинала
+ * @param options - Опции генерации (selections, keepAudio, duration, aspectRatio)
  */
 export async function generate(
   analysisId: string,
-  selections?: ElementSelection[],
-  keepAudio = false
+  options?: GenerateOptions
 ): Promise<GenerateResponse> {
   const response = await fetch(`${API_URL}/api/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       analysisId,
-      selections,
-      keepAudio,
+      selections: options?.selections,
+      keepAudio: options?.keepAudio ?? false,
+      duration: options?.duration,
+      aspectRatio: options?.aspectRatio,
     }),
     credentials: "include",
   });
