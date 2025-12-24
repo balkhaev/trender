@@ -32,7 +32,7 @@ import {
   useStartScrape,
   useUploadPipelineVideo,
 } from "@/lib/hooks/use-dashboard";
-import type { JobStatus, SavedReel } from "@/lib/reels-api";
+import type { JobStatus } from "@/lib/reels-api";
 import { InstagramAuthPanel } from "./instagram-auth-panel";
 
 function formatNumber(num: number): string {
@@ -142,17 +142,6 @@ export function ScraperPanel() {
         },
       });
     }
-  };
-
-  const handleSelectFromLibrary = (reel: SavedReel) => {
-    processReel.mutate(reel.id, {
-      onSuccess: () => {
-        toast.success("Видео отправлено в обработку");
-      },
-      onError: (err) => {
-        toast.error(`Ошибка: ${err.message}`);
-      },
-    });
   };
 
   const activeJobs = jobs.filter(
