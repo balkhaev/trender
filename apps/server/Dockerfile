@@ -31,6 +31,7 @@ COPY packages/auth/package.json packages/auth/package.json
 COPY packages/db/package.json packages/db/package.json
 COPY packages/types/package.json packages/types/package.json
 COPY packages/utils/package.json packages/utils/package.json
+COPY packages/api-contracts/package.json packages/api-contracts/package.json
 COPY apps/server/package.json apps/server/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY apps/scrapper/package.json apps/scrapper/package.json
