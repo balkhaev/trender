@@ -163,11 +163,14 @@ export function VideoGenerator({
 
     // Преобразуем selections в формат API (camelCase)
     const apiSelections: ApiElementSelection[] = elementSelections
-      .filter((sel) => sel.selectedOptionId || sel.customImageUrl)
+      .filter(
+        (sel) => sel.selectedOptionId || sel.customImageUrl || sel.customPrompt
+      )
       .map((sel) => ({
         elementId: sel.elementId,
         optionId: sel.selectedOptionId || undefined,
         customImageUrl: sel.customImageUrl,
+        customPrompt: sel.customPrompt,
       }));
 
     try {

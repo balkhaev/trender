@@ -27,6 +27,7 @@ export type ElementSelection = {
   elementId: string;
   selectedOptionId?: string;
   customMediaUrl?: string;
+  customPrompt?: string;
 };
 
 /**
@@ -55,84 +56,90 @@ export function buildPromptFromSelections(
     const element = elements.find((e) => e.id === selection.elementId);
     if (!element) continue;
 
-    // Check for custom image first (selectedOptionId === "custom" or has customMediaUrl)
+    // Check for custom option (image or text prompt)
     if (
       selection.selectedOptionId === "custom" ||
-      (!selection.selectedOptionId && selection.customMediaUrl)
+      (!selection.selectedOptionId &&
+        (selection.customMediaUrl || selection.customPrompt))
     ) {
+      // Строим точное описание цели для замены
+      const targetDesc = element.description
+        ? `${element.label} (${element.description})`
+        : element.label;
+
+      // Собираем контекст позиции и взаимодействия
+      const contextParts: string[] = [];
+      if (element.position) {
+        contextParts.push(`located ${element.position}`);
+      }
+      if (element.environmentInteractions) {
+        contextParts.push(element.environmentInteractions);
+      }
+      if (element.visibilityPercent !== undefined) {
+        contextParts.push(`${element.visibilityPercent}% visible`);
+      }
+      if (element.contactPoints) {
+        contextParts.push(`contact: ${element.contactPoints}`);
+      }
+
+      const contextHint =
+        contextParts.length > 0 ? ` (${contextParts.join(", ")})` : "";
+
+      let replacePrompt: string;
+
       if (selection.customMediaUrl) {
         // User provided custom image - add to imageList and reference in prompt
         imageUrls.push(selection.customMediaUrl);
         const imageIndex = imageUrls.length; // 1-based index for Kling
-
-        // Строим точное описание цели для замены
-        const targetDesc = element.description
-          ? `${element.label} (${element.description})`
-          : element.label;
-
-        // Собираем контекст позиции и взаимодействия
-        const contextParts: string[] = [];
-        if (element.position) {
-          contextParts.push(`located ${element.position}`);
-        }
-        if (element.environmentInteractions) {
-          contextParts.push(element.environmentInteractions);
-        }
-        if (element.visibilityPercent !== undefined) {
-          contextParts.push(`${element.visibilityPercent}% visible`);
-        }
-        if (element.contactPoints) {
-          contextParts.push(`contact: ${element.contactPoints}`);
-        }
-
-        const contextHint =
-          contextParts.length > 0 ? ` (${contextParts.join(", ")})` : "";
-
-        // Строим промпт с акцентом на сохранение взаимодействий
-        let replacePrompt = `Replace ONLY the ${targetDesc}${contextHint} with the reference from <<<image_${imageIndex}>>>`;
-
-        // КРИТИЧЕСКИ ВАЖНО: инструкции по сохранению взаимодействий
-        const preserveInstructions: string[] = [];
-
-        if (element.environmentInteractions) {
-          preserveInstructions.push(
-            `PRESERVE EXACT ENVIRONMENT INTERACTION: ${element.environmentInteractions}`
-          );
-        }
-
-        if (element.visibilityPercent !== undefined) {
-          preserveInstructions.push(
-            `maintain ${element.visibilityPercent}% visibility (same occlusion as original)`
-          );
-        }
-
-        if (element.contactPoints) {
-          preserveInstructions.push(
-            `keep contact points: ${element.contactPoints}`
-          );
-        }
-
-        if (element.occlusionInfo) {
-          preserveInstructions.push(
-            `preserve occlusion: ${element.occlusionInfo}`
-          );
-        }
-
-        // Базовые инструкции физики
-        preserveInstructions.push(
-          "maintain exact position, scale, angle, orientation, perspective",
-          "replacement must have IDENTICAL spatial relationship with environment as original"
-        );
-
-        replacePrompt += `. CRITICAL: ${preserveInstructions.join(". ")}`;
-
-        // Добавляем защиту других объектов
-        if (unchangedLabels.length > 0) {
-          replacePrompt += `. Keep unchanged: ${unchangedLabels.join(", ")}`;
-        }
-
-        parts.push(replacePrompt);
+        replacePrompt = `Replace ONLY the ${targetDesc}${contextHint} with the reference from <<<image_${imageIndex}>>>`;
+      } else if (selection.customPrompt) {
+        // User provided custom text prompt
+        replacePrompt = `Replace ONLY the ${targetDesc}${contextHint} with: ${selection.customPrompt}`;
+      } else {
+        continue; // No custom data provided
       }
+
+      // КРИТИЧЕСКИ ВАЖНО: инструкции по сохранению взаимодействий
+      const preserveInstructions: string[] = [];
+
+      if (element.environmentInteractions) {
+        preserveInstructions.push(
+          `PRESERVE EXACT ENVIRONMENT INTERACTION: ${element.environmentInteractions}`
+        );
+      }
+
+      if (element.visibilityPercent !== undefined) {
+        preserveInstructions.push(
+          `maintain ${element.visibilityPercent}% visibility (same occlusion as original)`
+        );
+      }
+
+      if (element.contactPoints) {
+        preserveInstructions.push(
+          `keep contact points: ${element.contactPoints}`
+        );
+      }
+
+      if (element.occlusionInfo) {
+        preserveInstructions.push(
+          `preserve occlusion: ${element.occlusionInfo}`
+        );
+      }
+
+      // Базовые инструкции физики
+      preserveInstructions.push(
+        "maintain exact position, scale, angle, orientation, perspective",
+        "replacement must have IDENTICAL spatial relationship with environment as original"
+      );
+
+      replacePrompt += `. CRITICAL: ${preserveInstructions.join(". ")}`;
+
+      // Добавляем защиту других объектов
+      if (unchangedLabels.length > 0) {
+        replacePrompt += `. Keep unchanged: ${unchangedLabels.join(", ")}`;
+      }
+
+      parts.push(replacePrompt);
     } else if (selection.selectedOptionId) {
       // User selected a predefined option
       const option = element.remixOptions.find(

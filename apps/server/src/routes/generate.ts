@@ -163,11 +163,15 @@ app.openapi(generateRoute, async (c) => {
           }
         }
 
-        // Если optionId === "custom", должен быть customImageUrl
-        if (sel.optionId === "custom" && !sel.customImageUrl) {
+        // Если optionId === "custom", должен быть customImageUrl или customPrompt
+        if (
+          sel.optionId === "custom" &&
+          !sel.customImageUrl &&
+          !sel.customPrompt
+        ) {
           return c.json(
             {
-              error: `customImageUrl is required when optionId is "custom" for element ${sel.elementId}`,
+              error: `customImageUrl or customPrompt is required when optionId is "custom" for element ${sel.elementId}`,
             },
             400
           );
@@ -187,6 +191,7 @@ app.openapi(generateRoute, async (c) => {
       elementId: sel.elementId,
       selectedOptionId: sel.optionId,
       customMediaUrl: sel.customImageUrl,
+      customPrompt: sel.customPrompt,
     }));
 
     // 6. Строим промпт из selections
@@ -393,26 +398,45 @@ app.openapi(statusRoute, async (c) => {
 
   const status = statusMap[generation.status] ?? "queued";
 
-  return c.json({
-    generationId: generation.id,
-    status,
-    progress: generation.progress,
-    stage: generation.progressStage,
-    message: generation.progressMessage,
-    providerProgress: generation.klingProgress ?? undefined,
-    ...(generation.status === "completed" &&
-      generation.videoUrl && {
-        result: {
-          videoUrl: getGenerationVideoPublicUrl(generation.id),
-          thumbnailUrl: generation.thumbnailUrl,
-          duration: generation.durationSec,
-        },
-      }),
-    error: generation.error ?? undefined,
-    createdAt: generation.createdAt.toISOString(),
-    startedAt: generation.lastActivityAt?.toISOString() ?? undefined,
-    completedAt: generation.completedAt?.toISOString() ?? undefined,
-  });
+  // Map progress stage to valid enum value
+  const validStages = [
+    "analyzing",
+    "generating_character",
+    "setting_up_lighting",
+    "applying_style",
+    "rendering",
+    "finalizing",
+  ] as const;
+  type ValidStage = (typeof validStages)[number];
+  const stage: ValidStage = validStages.includes(
+    generation.progressStage as ValidStage
+  )
+    ? (generation.progressStage as ValidStage)
+    : "analyzing";
+
+  return c.json(
+    {
+      generationId: generation.id,
+      status,
+      progress: generation.progress,
+      stage,
+      message: generation.progressMessage ?? "",
+      providerProgress: generation.klingProgress ?? undefined,
+      ...(generation.status === "completed" &&
+        generation.videoUrl && {
+          result: {
+            videoUrl: getGenerationVideoPublicUrl(generation.id),
+            thumbnailUrl: generation.thumbnailUrl,
+            duration: generation.durationSec,
+          },
+        }),
+      error: generation.error ?? undefined,
+      createdAt: generation.createdAt.toISOString(),
+      startedAt: generation.lastActivityAt?.toISOString() ?? undefined,
+      completedAt: generation.completedAt?.toISOString() ?? undefined,
+    },
+    200
+  );
 });
 
 // ============================================

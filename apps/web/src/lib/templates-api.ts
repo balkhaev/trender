@@ -806,6 +806,7 @@ export type ElementSelection = {
   elementId: string;
   optionId?: string;
   customImageUrl?: string;
+  customPrompt?: string;
 };
 
 /**

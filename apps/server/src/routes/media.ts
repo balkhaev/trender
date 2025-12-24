@@ -306,7 +306,7 @@ app.openapi(deleteMediaRoute, async (c) => {
   // Delete from database
   await prisma.userMedia.delete({ where: { id } });
 
-  return c.json({ success: true });
+  return c.json({ success: true }, 200);
 });
 
 // ============================================
@@ -335,7 +335,8 @@ const stockMediaRoute = createRoute({
 });
 
 app.openapi(stockMediaRoute, async (c) => {
-  const _query = c.req.valid("query");
+  // Query params available for future stock media integration
+  c.req.valid("query");
 
   // TODO: Implement stock media integration (Pexels, Unsplash, etc.)
   // For now, return empty list with available categories

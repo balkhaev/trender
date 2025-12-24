@@ -66,17 +66,20 @@ app.openapi(generateAssetRoute, async (c) => {
       userId,
     });
 
-    return c.json({
-      success: true,
-      asset: {
-        id: asset.id,
-        url: asset.url,
-        prompt: asset.prompt,
-        category: asset.category,
-        width: asset.width,
-        height: asset.height,
+    return c.json(
+      {
+        success: true,
+        asset: {
+          id: asset.id,
+          url: asset.url,
+          prompt: asset.prompt,
+          category: asset.category,
+          width: asset.width,
+          height: asset.height,
+        },
       },
-    });
+      200
+    );
   } catch (error) {
     console.error("Asset generation error:", error);
     const message =

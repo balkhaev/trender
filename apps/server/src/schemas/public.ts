@@ -355,12 +355,18 @@ export const ElementSelectionSchema = z
       example: "char-1",
     }),
     optionId: z.string().optional().openapi({
-      description: "ID опции из element.remixOptions",
+      description:
+        'ID опции из element.remixOptions или "custom" для кастомного промпта/изображения',
       example: "opt-1",
     }),
     customImageUrl: z.string().url().optional().openapi({
       description: "URL кастомного изображения для замены элемента",
       example: "https://storage.example.com/uploads/my-character.jpg",
+    }),
+    customPrompt: z.string().optional().openapi({
+      description:
+        'Кастомный текстовый промпт для замены элемента (используется когда optionId="custom")',
+      example: "A friendly golden retriever puppy",
     }),
   })
   .openapi("ElementSelection");
