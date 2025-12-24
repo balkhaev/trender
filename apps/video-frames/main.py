@@ -417,6 +417,74 @@ def extract_frames_in_range(
     return frames
 
 
+def extend_video_with_black(
+    video_path: str,
+    output_path: str,
+    target_duration: float
+) -> bool:
+    """
+    Extend video duration by adding black frames at the end
+
+    Args:
+        video_path: Path to input video file
+        output_path: Path for output extended video
+        target_duration: Target duration in seconds (must be > current duration)
+
+    Returns:
+        True if successful
+    """
+    # Get current video properties
+    current_duration = get_video_duration(video_path)
+    if not current_duration:
+        raise RuntimeError("Could not determine video duration")
+
+    if current_duration >= target_duration:
+        # No extension needed, just copy
+        import shutil
+        shutil.copy(video_path, output_path)
+        return True
+
+    dimensions = get_video_dimensions(video_path)
+    if not dimensions:
+        raise RuntimeError("Could not determine video dimensions")
+
+    width, height = dimensions
+    extension_duration = target_duration - current_duration
+
+    # Create black video segment and concatenate with original
+    # Using complex filter to extend with black frames
+    cmd = [
+        "ffmpeg",
+        "-i", video_path,
+        "-f", "lavfi",
+        "-i", f"color=c=black:s={width}x{height}:d={extension_duration}:r=30",
+        "-f", "lavfi",
+        "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+        "-filter_complex",
+        f"[1:v][2:a]atrim=0:{extension_duration}[black_audio];[0:v][0:a][1:v][black_audio]concat=n=2:v=1:a=1[outv][outa]",
+        "-map", "[outv]",
+        "-map", "[outa]",
+        "-c:v", "libx264",
+        "-c:a", "aac",
+        "-preset", "fast",
+        "-movflags", "+faststart",
+        output_path,
+        "-y"
+    ]
+
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=300  # 5 minute timeout
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(f"FFmpeg extend failed: {result.stderr}")
+
+    return True
+
+
 def concat_videos_ffmpeg(
     video_paths: list[str],
     output_path: str
@@ -982,6 +1050,79 @@ async def extract_frames_range(
                 count=len(frames_base64),
                 duration_sec=end_time - start_time,
                 interval_sec=(end_time - start_time) / max_frames
+            )
+
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="Video processing timed out")
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {e}")
+
+
+@app.post("/extend-duration")
+async def extend_duration(
+    video: UploadFile = File(...),
+    target_duration: float = Form(...)
+):
+    """
+    Extend video duration by adding black frames at the end.
+    Used to meet minimum duration requirements (e.g., Kling API's 3 second minimum).
+
+    - **video**: Video file (mp4, webm, etc.)
+    - **target_duration**: Target duration in seconds (must be >= current duration)
+
+    Returns extended video as streaming response with headers:
+    - X-Original-Duration: Original video duration
+    - X-New-Duration: Extended video duration
+    - X-Extended: "true" if video was extended, "false" if already meets target
+    """
+    if target_duration <= 0:
+        raise HTTPException(status_code=400, detail="target_duration must be positive")
+
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_path = os.path.join(tmpdir, "input_video.mp4")
+            output_path = os.path.join(tmpdir, "output_extended.mp4")
+
+            # Write uploaded video to temp file
+            content = await video.read()
+            with open(input_path, "wb") as f:
+                f.write(content)
+
+            # Get original duration
+            original_duration = get_video_duration(input_path)
+            if not original_duration:
+                raise HTTPException(status_code=400, detail="Could not determine video duration")
+
+            was_extended = original_duration < target_duration
+
+            if was_extended:
+                # Extend the video
+                extend_video_with_black(input_path, output_path, target_duration)
+            else:
+                # No extension needed, use original
+                output_path = input_path
+
+            # Get output duration
+            new_duration = get_video_duration(output_path)
+
+            # Read the output file
+            with open(output_path, "rb") as f:
+                video_bytes = f.read()
+
+            def iterfile():
+                yield video_bytes
+
+            return StreamingResponse(
+                iterfile(),
+                media_type="video/mp4",
+                headers={
+                    "Content-Disposition": "attachment; filename=extended_video.mp4",
+                    "X-Original-Duration": str(original_duration),
+                    "X-New-Duration": str(new_duration) if new_duration else str(target_duration),
+                    "X-Extended": "true" if was_extended else "false",
+                }
             )
 
     except subprocess.TimeoutExpired:

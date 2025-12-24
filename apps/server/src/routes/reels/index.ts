@@ -20,7 +20,6 @@ import { getDownloadsPath } from "../../services/instagram/downloader";
 import { pipelineLogger } from "../../services/pipeline-logger";
 import { pipelineJobQueue } from "../../services/queues";
 import { s3Service } from "../../services/s3";
-import { buildReelVideoUrl } from "../../services/url-builder";
 import { authRouter } from "./auth";
 import { initScrapeWorkerHandler, scrapeRouter } from "./scrape";
 
@@ -1127,15 +1126,29 @@ reelsRouter.openapi(resizeReelRoute, async (c) => {
       return c.json({ error: "Video not downloaded yet" }, 400);
     }
 
-    // Get source video URL
-    const sourceUrl = buildReelVideoUrl(reel);
-    if (!sourceUrl) {
-      return c.json({ error: "Could not build video URL" }, 500);
+    // Get video buffer
+    let videoBuffer: Buffer;
+    if (reel.s3Key) {
+      const result = await s3Service.getFileStream(reel.s3Key);
+      if (!result) {
+        return c.json({ error: "Could not get video from S3" }, 500);
+      }
+      const arrayBuffer = await new Response(result.stream).arrayBuffer();
+      videoBuffer = Buffer.from(arrayBuffer);
+    } else if (reel.localPath) {
+      const { readFile } = await import("node:fs/promises");
+      videoBuffer = await readFile(reel.localPath);
+    } else {
+      return c.json({ error: "No video source available" }, 500);
     }
 
     // Call video-frames service for resize
     const formData = new FormData();
-    formData.append("url", sourceUrl);
+    formData.append(
+      "video",
+      new Blob([videoBuffer], { type: "video/mp4" }),
+      "video.mp4"
+    );
 
     const response = await fetch(`${VIDEO_FRAMES_SERVICE_URL}/resize`, {
       method: "POST",

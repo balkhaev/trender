@@ -24,8 +24,61 @@ const VIDEO_FRAMES_SERVICE_URL = services.videoFrames;
 const SCENE_GENERATIONS_DIR = join(paths.dataDir, "scene-generations");
 const COMPOSITE_GENERATIONS_DIR = join(paths.dataDir, "composite-generations");
 
+// Kling API duration constraints
+const KLING_MIN_DURATION = 3; // Minimum 3 seconds required by Kling
+const KLING_MAX_DURATION = 10; // Maximum 10 seconds allowed by Kling
+
 async function ensureDir(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true });
+}
+
+/**
+ * Extend video to minimum duration by adding black frames at the end
+ * Required because Kling API requires videos to be at least 3 seconds long
+ */
+async function extendVideoToMinDuration(
+  videoBuffer: Buffer,
+  targetDuration: number = KLING_MIN_DURATION
+): Promise<Buffer> {
+  const { fetchWithTimeout, FETCH_TIMEOUTS } = await import(
+    "../../utils/fetch-with-timeout"
+  );
+
+  const formData = new FormData();
+  formData.append(
+    "video",
+    new Blob([new Uint8Array(videoBuffer)], { type: "video/mp4" }),
+    "input.mp4"
+  );
+  formData.append("target_duration", targetDuration.toString());
+
+  // 3 min timeout for extend operation
+  const response = await fetchWithTimeout(
+    `${VIDEO_FRAMES_SERVICE_URL}/extend-duration`,
+    {
+      method: "POST",
+      body: formData,
+    },
+    FETCH_TIMEOUTS.trim
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to extend video duration: ${errorText}`);
+  }
+
+  const extendedBuffer = await response.arrayBuffer();
+  const wasExtended = response.headers.get("X-Extended") === "true";
+  const originalDuration = response.headers.get("X-Original-Duration");
+  const newDuration = response.headers.get("X-New-Duration");
+
+  if (wasExtended) {
+    console.log(
+      `[SceneGenQueue] Video extended from ${originalDuration}s to ${newDuration}s`
+    );
+  }
+
+  return Buffer.from(extendedBuffer);
 }
 
 // ============================================================================
@@ -135,6 +188,24 @@ export const sceneGenWorker = new Worker<SceneGenJobData, SceneGenJobResult>(
 
     console.log(`[SceneGenQueue] Processing scene ${sceneGenerationId}`);
 
+    // Calculate scene duration
+    const sceneDuration = endTime - startTime;
+    console.log(`[SceneGenQueue] Scene duration: ${sceneDuration.toFixed(2)}s`);
+
+    // Validate duration constraints
+    if (sceneDuration > KLING_MAX_DURATION) {
+      throw new Error(
+        `Длительность сцены (${sceneDuration.toFixed(1)}с) превышает максимум Kling API (${KLING_MAX_DURATION}с)`
+      );
+    }
+
+    const needsExtension = sceneDuration < KLING_MIN_DURATION;
+    if (needsExtension) {
+      console.log(
+        `[SceneGenQueue] Scene duration ${sceneDuration.toFixed(2)}s < ${KLING_MIN_DURATION}s, will extend with black frames`
+      );
+    }
+
     try {
       // Update status
       await prisma.sceneGeneration.update({
@@ -154,6 +225,7 @@ export const sceneGenWorker = new Worker<SceneGenJobData, SceneGenJobResult>(
       });
 
       let trimmedVideoUrl: string;
+      let trimmedBuffer: Buffer | undefined;
 
       if (scene?.videoUrl) {
         // Use pre-trimmed video from analysis
@@ -167,6 +239,24 @@ export const sceneGenWorker = new Worker<SceneGenJobData, SceneGenJobResult>(
           percent: 15,
           message: "Используется сохраненная нарезка сцены...",
         });
+
+        // If needs extension, download the video first
+        if (needsExtension) {
+          const { fetchWithTimeout, FETCH_TIMEOUTS } = await import(
+            "../../utils/fetch-with-timeout"
+          );
+          const response = await fetchWithTimeout(
+            trimmedVideoUrl,
+            {},
+            FETCH_TIMEOUTS.download
+          );
+          if (!response.ok) {
+            throw new Error(
+              `Failed to download pre-trimmed video: ${response.status}`
+            );
+          }
+          trimmedBuffer = Buffer.from(await response.arrayBuffer());
+        }
       } else {
         // Fallback: trim video on-the-fly (legacy behavior)
         console.log(
@@ -179,11 +269,7 @@ export const sceneGenWorker = new Worker<SceneGenJobData, SceneGenJobResult>(
           message: "Обрезка видео до нужной сцены...",
         });
 
-        const trimmedBuffer = await trimVideo(
-          sourceVideoUrl,
-          startTime,
-          endTime
-        );
+        trimmedBuffer = await trimVideo(sourceVideoUrl, startTime, endTime);
 
         await updateSceneProgress(job, {
           stage: "analyzing" as any,
@@ -194,6 +280,30 @@ export const sceneGenWorker = new Worker<SceneGenJobData, SceneGenJobResult>(
         trimmedVideoUrl = await uploadTrimmedVideoForKling(
           trimmedBuffer,
           sceneGenerationId
+        );
+      }
+
+      // Extend video if duration is less than minimum required by Kling
+      if (needsExtension && trimmedBuffer) {
+        await updateSceneProgress(job, {
+          stage: "analyzing" as any,
+          percent: 17,
+          message: `Расширение видео до ${KLING_MIN_DURATION}с (добавление черного кадра)...`,
+        });
+
+        const extendedBuffer = await extendVideoToMinDuration(
+          trimmedBuffer,
+          KLING_MIN_DURATION
+        );
+
+        // Upload extended video
+        trimmedVideoUrl = await uploadTrimmedVideoForKling(
+          extendedBuffer,
+          `${sceneGenerationId}-extended`
+        );
+
+        console.log(
+          `[SceneGenQueue] Extended video uploaded: ${trimmedVideoUrl}`
         );
       }
 
