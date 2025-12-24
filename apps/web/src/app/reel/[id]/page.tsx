@@ -205,6 +205,17 @@ export default function ReelDetailPage() {
       onError: (err: Error) => toast.error(err.message),
     });
 
+  const { mutate: regenerateSceneMutation, isPending: isRegeneratingScene } =
+    useMutation({
+      mutationFn: (sceneId: string) =>
+        import("@/lib/templates-api").then((m) => m.regenerateScene(sceneId)),
+      onSuccess: () => {
+        toast.success("Перегенерация сцены запущена");
+        refetch();
+      },
+      onError: (err: Error) => toast.error(err.message),
+    });
+
   const handleResetStatus = useCallback(() => {
     resetReelStatus(reelId, {
       onSuccess: () => {
@@ -755,7 +766,11 @@ export default function ReelDetailPage() {
                       </CollapsibleTrigger>
                       <CollapsibleContent className="mt-2 space-y-3">
                         {data.sceneGenerations?.map((gen) => (
-                          <SceneGenerationCard generation={gen} key={gen.id} />
+                          <SceneGenerationCard
+                            generation={gen}
+                            key={gen.id}
+                            onRegenerate={regenerateSceneMutation}
+                          />
                         ))}
                       </CollapsibleContent>
                     </Collapsible>
@@ -1253,7 +1268,13 @@ function CompositeGenerationCard({
   );
 }
 
-function SceneGenerationCard({ generation }: { generation: SceneGeneration }) {
+function SceneGenerationCard({
+  generation,
+  onRegenerate,
+}: {
+  generation: SceneGeneration;
+  onRegenerate?: (sceneId: string) => void;
+}) {
   const isActive =
     generation.status === "pending" || generation.status === "processing";
   const isCompleted = generation.status === "completed";
@@ -1319,6 +1340,17 @@ function SceneGenerationCard({ generation }: { generation: SceneGeneration }) {
         <div className="flex items-center gap-2 text-muted-foreground text-xs">
           {duration !== null && (
             <span className="text-emerald-300">{duration}с</span>
+          )}
+          {(isCompleted || isFailed) && onRegenerate && (
+            <Button
+              className="h-6 px-2 text-xs"
+              onClick={() => onRegenerate(generation.sceneId)}
+              size="sm"
+              variant="ghost"
+            >
+              <RefreshCw className="mr-1 h-3 w-3" />
+              Перегенерировать
+            </Button>
           )}
         </div>
       </div>

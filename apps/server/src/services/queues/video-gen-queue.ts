@@ -66,9 +66,9 @@ export const videoGenWorker = new Worker<VideoGenJobData, VideoGenJobResult>(
       });
 
       await updateProgress(job, {
-        stage: "processing",
+        stage: "analyzing" as any,
         percent: 10,
-        message: "Starting Kling video-to-video generation...",
+        message: "Analyzing parameters...",
       });
 
       // Check source video URL
@@ -93,9 +93,9 @@ export const videoGenWorker = new Worker<VideoGenJobData, VideoGenJobResult>(
       let enhancedPrompt = prompt;
       if (isOpenAIConfigured()) {
         await updateProgress(job, {
-          stage: "enhancing",
+          stage: "generating_character" as any,
           percent: 12,
-          message: "Enhancing prompt for Kling AI...",
+          message: "Generating character and styles...",
         });
         const openai = getOpenAIService();
         enhancedPrompt = await openai.enhancePromptForKling(
@@ -120,18 +120,27 @@ export const videoGenWorker = new Worker<VideoGenJobData, VideoGenJobResult>(
           elements: options?.elements,
           negativePrompt: options?.negativePrompt,
           onProgress: async (status, klingProgress, message) => {
-            // Map Kling status to our progress percentage (10-60%)
             let percent = 15;
+            let stage: any = "generating_character";
+
             if (status === "processing") {
               percent =
                 klingProgress !== undefined
-                  ? 15 + Math.floor(klingProgress * 0.45)
+                  ? 15 + Math.floor(klingProgress * 0.65)
                   : 30;
+
+              // Dynamically update stage based on progress to match Figma flow
+              if (percent > 80) stage = "rendering";
+              else if (percent > 60) stage = "applying_style";
+              else if (percent > 40) stage = "setting_up_lighting";
+              else if (percent > 20) stage = "generating_character";
             } else if (status === "completed") {
-              percent = 60;
+              percent = 80;
+              stage = "rendering";
             }
+
             await updateProgress(job, {
-              stage: "processing",
+              stage,
               percent,
               message,
               klingProgress,
@@ -149,16 +158,16 @@ export const videoGenWorker = new Worker<VideoGenJobData, VideoGenJobResult>(
       });
 
       await updateProgress(job, {
-        stage: "processing",
-        percent: 60,
-        message: "API call completed",
+        stage: "rendering" as any,
+        percent: 80,
+        message: "Video rendering in progress...",
       });
 
       if (result.success && result.videoUrl) {
         await updateProgress(job, {
-          stage: "downloading",
-          percent: 70,
-          message: "Downloading video from Kling...",
+          stage: "rendering" as any,
+          percent: 85,
+          message: "Finalizing video magic...",
         });
 
         // Download and store the video
@@ -179,9 +188,9 @@ export const videoGenWorker = new Worker<VideoGenJobData, VideoGenJobResult>(
             // Используем оригинальный URL от Kling (временный, истечёт)
           } else {
             await updateProgress(job, {
-              stage: "uploading",
-              percent: 85,
-              message: "Uploading to storage...",
+              stage: "finalizing" as any,
+              percent: 90,
+              message: "Finalizing magic...",
             });
 
             if (downloadResult.s3Key) {
@@ -194,9 +203,9 @@ export const videoGenWorker = new Worker<VideoGenJobData, VideoGenJobResult>(
         }
 
         await updateProgress(job, {
-          stage: "uploading",
-          percent: 95,
-          message: "Сохранение результата...",
+          stage: "finalizing" as any,
+          percent: 98,
+          message: "Saving results...",
         });
 
         // Update generation record
@@ -209,7 +218,7 @@ export const videoGenWorker = new Worker<VideoGenJobData, VideoGenJobResult>(
             klingTaskId: result.taskId,
             completedAt: new Date(),
             progress: 100,
-            progressStage: "completed",
+            progressStage: "finalizing",
             progressMessage: "Генерация завершена успешно",
             lastActivityAt: new Date(),
           },

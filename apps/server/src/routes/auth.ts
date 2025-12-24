@@ -1,70 +1,17 @@
 import { createRoute, OpenAPIHono, z } from "@hono/zod-openapi";
 import jwt from "jsonwebtoken";
 import { server } from "../config";
-import { UnauthorizedResponseSchema } from "../schemas";
+import {
+  AppleAuthRequestSchema,
+  AuthResponseSchema,
+  BasicTokenRequestSchema,
+  GoogleAuthRequestSchema,
+  RefreshTokenRequestSchema,
+  RefreshTokenResponseSchema,
+  UnauthorizedResponseSchema,
+} from "../schemas";
 
 const JWT_SECRET = server.jwtSecret;
-
-// --- Schemas ---
-
-const BasicTokenRequestSchema = z
-  .object({
-    deviceType: z
-      .string()
-      .openapi({ description: "Mobile platform name", example: "Android" }),
-    algorithm: z.string().openapi({
-      description: "Hashing algorithm used for signature (if any)",
-      example: "HMAC-SHA256",
-    }),
-    timestamp: z.string().openapi({
-      description: "Unix timestamp in milliseconds as string",
-      example: "1625097600000",
-    }),
-    installationHash: z.string().openapi({
-      description: "Unique client-side generated device identifier",
-      example: "client_generated_hash",
-    }),
-  })
-  .openapi("BasicTokenRequest");
-
-const AuthResponseSchema = z
-  .object({
-    accessToken: z.string().openapi({
-      description: "Short-lived JWT access token",
-      example: "eyJhbG...",
-    }),
-    refreshToken: z.string().openapi({
-      description: "Long-lived JWT refresh token",
-      example: "eyJhbG...",
-    }),
-    expiresIn: z.number().openapi({
-      description: "Access token lifetime in seconds",
-      example: 3600,
-    }),
-  })
-  .openapi("AuthResponse");
-
-const RefreshTokenRequestSchema = z
-  .object({
-    refreshToken: z.string().openapi({
-      description: "The refresh token obtained during initial authentication",
-      example: "eyJhbG...",
-    }),
-  })
-  .openapi("RefreshTokenRequest");
-
-const RefreshTokenResponseSchema = z
-  .object({
-    accessToken: z.string().openapi({
-      description: "New short-lived JWT access token",
-      example: "eyJhbG...",
-    }),
-    expiresIn: z.number().openapi({
-      description: "New access token lifetime in seconds",
-      example: 3600,
-    }),
-  })
-  .openapi("RefreshTokenResponse");
 
 // --- Routes ---
 
@@ -131,6 +78,66 @@ const refreshRoute = createRoute({
         },
       },
       description: "Invalid or expired refresh token",
+    },
+  },
+});
+
+const googleAuthRoute = createRoute({
+  method: "post",
+  path: "/google",
+  summary: "Authentication via Google",
+  tags: ["Auth"],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: GoogleAuthRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: AuthResponseSchema,
+        },
+      },
+      description: "Successful Google authentication",
+    },
+    401: {
+      content: { "application/json": { schema: UnauthorizedResponseSchema } },
+      description: "Invalid Google token",
+    },
+  },
+});
+
+const appleAuthRoute = createRoute({
+  method: "post",
+  path: "/apple",
+  summary: "Authentication via Apple",
+  tags: ["Auth"],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: AppleAuthRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: AuthResponseSchema,
+        },
+      },
+      description: "Successful Apple authentication",
+    },
+    401: {
+      content: { "application/json": { schema: UnauthorizedResponseSchema } },
+      description: "Invalid Apple token",
     },
   },
 });
@@ -213,4 +220,36 @@ authRouter.openapi(refreshRoute, (c) => {
   } catch (_e) {
     return c.json({ error: "Invalid or expired refresh token" }, 401);
   }
+});
+
+authRouter.openapi(googleAuthRoute, async (c) => {
+  const { idToken } = c.req.valid("json");
+
+  // In a real app, verify idToken with Google API
+  const userId = `google-${idToken.substring(0, 10)}`;
+
+  const accessToken = jwt.sign({ sub: userId, type: "access" }, JWT_SECRET, {
+    expiresIn: "1h",
+  });
+  const refreshToken = jwt.sign({ sub: userId, type: "refresh" }, JWT_SECRET, {
+    expiresIn: "7d",
+  });
+
+  return c.json({ accessToken, refreshToken, expiresIn: 3600 }, 200);
+});
+
+authRouter.openapi(appleAuthRoute, async (c) => {
+  const { identityToken, user: _user } = c.req.valid("json");
+
+  // In a real app, verify identityToken with Apple API
+  const userId = `apple-${identityToken.substring(0, 10)}`;
+
+  const accessToken = jwt.sign({ sub: userId, type: "access" }, JWT_SECRET, {
+    expiresIn: "1h",
+  });
+  const refreshToken = jwt.sign({ sub: userId, type: "refresh" }, JWT_SECRET, {
+    expiresIn: "7d",
+  });
+
+  return c.json({ accessToken, refreshToken, expiresIn: 3600 }, 200);
 });

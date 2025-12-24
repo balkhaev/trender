@@ -29,6 +29,67 @@ export const RemixOptionSchema = z
   })
   .openapi("RemixOption");
 
+// ===== AUTH SCHEMAS =====
+
+export const AuthResponseSchema = z
+  .object({
+    accessToken: z.string().openapi({
+      description: "Short-lived JWT access token",
+      example: "eyJhbG...",
+    }),
+    refreshToken: z.string().openapi({
+      description: "Long-lived JWT refresh token",
+      example: "eyJhbG...",
+    }),
+    expiresIn: z.number().openapi({
+      description: "Access token lifetime in seconds",
+      example: 3600,
+    }),
+  })
+  .openapi("AuthResponse");
+
+export const RefreshTokenRequestSchema = z
+  .object({
+    refreshToken: z.string().openapi({
+      description: "The refresh token obtained during initial authentication",
+      example: "eyJhbG...",
+    }),
+  })
+  .openapi("RefreshTokenRequest");
+
+export const RefreshTokenResponseSchema = z
+  .object({
+    accessToken: z.string().openapi({
+      description: "New short-lived JWT access token",
+      example: "eyJhbG...",
+    }),
+    expiresIn: z.number().openapi({
+      description: "New access token lifetime in seconds",
+      example: 3600,
+    }),
+  })
+  .openapi("RefreshTokenResponse");
+
+export const BasicTokenRequestSchema = z
+  .object({
+    deviceType: z
+      .string()
+      .openapi({ description: "Mobile platform name", example: "Android" }),
+    algorithm: z.string().openapi({
+      description: "Hashing algorithm used for signature (if any)",
+      example: "HMAC-SHA256",
+    }),
+    timestamp: z.string().openapi({
+      description: "Unix timestamp in milliseconds as string",
+      example: "1625097600000",
+    }),
+    installationHash: z.string().openapi({
+      description: "Unique client-side generated device identifier",
+      example: "client_generated_hash",
+    }),
+  })
+  .openapi("BasicTokenRequest");
+
 export const DetectableElementSchema = z
   .object({
     id: z.string().openapi({ description: "Element ID", example: "char-1" }),
@@ -566,7 +627,18 @@ export const GenerationStatusResponseSchema = z
     generationId: z.string(),
     status: z.enum(["queued", "processing", "completed", "failed"]),
     progress: z.number(),
-    stage: z.string(),
+    stage: z
+      .enum([
+        "analyzing",
+        "generating_character",
+        "setting_up_lighting",
+        "applying_style",
+        "rendering",
+        "finalizing",
+      ])
+      .openapi({
+        description: "Current generation stage as shown in Figma flow",
+      }),
     message: z.string(),
     providerProgress: z.number().optional(),
     result: z
@@ -607,6 +679,7 @@ export const GenerationItemSchema = z
       type: z.enum(["template", "upload", "url"]),
       templateId: z.string().optional(),
       templateTitle: z.string().optional(),
+      sourceUrl: z.string().optional(),
     }),
   })
   .openapi("GenerationItem");
@@ -808,3 +881,65 @@ export const ExtendedPersonalMediaResponseSchema = z
     offset: z.number(),
   })
   .openapi("ExtendedPersonalMediaResponse");
+
+// ===== PUBLISH & SHARE SCHEMAS =====
+
+export const PublishGenerationRequestSchema = z
+  .object({
+    isShared: z.boolean().default(true).openapi({
+      description: "Whether to share the result with the community",
+    }),
+    communityConsent: z.boolean().openapi({
+      description: "User consent for community sharing",
+    }),
+    title: z.string().optional().openapi({
+      description: "Custom title for the published template",
+    }),
+  })
+  .openapi("PublishGenerationRequest");
+
+export const PublishGenerationResponseSchema = z
+  .object({
+    success: z.boolean(),
+    templateId: z.string().optional().openapi({
+      description: "ID of the created template if shared",
+    }),
+  })
+  .openapi("PublishGenerationResponse");
+
+export const SocialShareRequestSchema = z
+  .object({
+    platform: z
+      .enum(["instagram", "tiktok", "youtube", "generic"])
+      .openapi({ description: "Target social platform" }),
+  })
+  .openapi("SocialShareRequest");
+
+export const SocialShareResponseSchema = z
+  .object({
+    success: z.boolean(),
+    shareUrl: z.string().optional().openapi({
+      description: "Deep link or share URL if applicable",
+    }),
+  })
+  .openapi("SocialShareResponse");
+
+// ===== OAUTH SCHEMAS =====
+
+export const GoogleAuthRequestSchema = z
+  .object({
+    idToken: z.string().openapi({ description: "Google ID Token" }),
+  })
+  .openapi("GoogleAuthRequest");
+
+export const AppleAuthRequestSchema = z
+  .object({
+    identityToken: z.string().openapi({ description: "Apple Identity Token" }),
+    user: z
+      .object({
+        name: z.string().optional(),
+        email: z.string().optional(),
+      })
+      .optional(),
+  })
+  .openapi("AppleAuthRequest");

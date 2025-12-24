@@ -148,7 +148,7 @@ export const sceneGenWorker = new Worker<SceneGenJobData, SceneGenJobResult>(
       });
 
       await updateSceneProgress(job, {
-        stage: "trimming",
+        stage: "analyzing" as any,
         percent: 5,
         message: "Обрезка видео до нужной сцены...",
       });
@@ -157,7 +157,7 @@ export const sceneGenWorker = new Worker<SceneGenJobData, SceneGenJobResult>(
       const trimmedBuffer = await trimVideo(sourceVideoUrl, startTime, endTime);
 
       await updateSceneProgress(job, {
-        stage: "trimming",
+        stage: "analyzing" as any,
         percent: 15,
         message: "Загрузка обрезанного видео...",
       });
@@ -174,7 +174,7 @@ export const sceneGenWorker = new Worker<SceneGenJobData, SceneGenJobResult>(
       );
 
       await updateSceneProgress(job, {
-        stage: "generating",
+        stage: "generating_character" as any,
         percent: 20,
         message: "Запуск генерации в Kling...",
       });
@@ -190,16 +190,23 @@ export const sceneGenWorker = new Worker<SceneGenJobData, SceneGenJobResult>(
         negativePrompt: options?.negativePrompt,
         onProgress: async (status, klingProgress, message) => {
           let percent = 25;
+          let stage: any = "generating_character";
+
           if (status === "processing") {
             percent =
               klingProgress !== undefined
                 ? 25 + Math.floor(klingProgress * 0.45)
                 : 40;
+
+            if (percent > 60) stage = "applying_style";
+            else if (percent > 40) stage = "setting_up_lighting";
           } else if (status === "completed") {
             percent = 70;
+            stage = "rendering";
           }
+
           await updateSceneProgress(job, {
-            stage: "generating",
+            stage,
             percent,
             message,
             klingProgress,
@@ -212,7 +219,7 @@ export const sceneGenWorker = new Worker<SceneGenJobData, SceneGenJobResult>(
       }
 
       await updateSceneProgress(job, {
-        stage: "downloading",
+        stage: "rendering" as any,
         percent: 75,
         message: "Скачивание видео с Kling...",
       });
@@ -221,7 +228,7 @@ export const sceneGenWorker = new Worker<SceneGenJobData, SceneGenJobResult>(
       const videoBuffer = await kling.downloadVideo(result.videoUrl);
 
       await updateSceneProgress(job, {
-        stage: "uploading",
+        stage: "finalizing" as any,
         percent: 85,
         message: "Сохранение результата...",
       });
@@ -246,7 +253,7 @@ export const sceneGenWorker = new Worker<SceneGenJobData, SceneGenJobResult>(
       }
 
       await updateSceneProgress(job, {
-        stage: "uploading",
+        stage: "finalizing" as any,
         percent: 95,
         message: "Завершение...",
       });
@@ -260,7 +267,7 @@ export const sceneGenWorker = new Worker<SceneGenJobData, SceneGenJobResult>(
           s3Key,
           klingTaskId: result.taskId,
           progress: 100,
-          progressStage: "completed",
+          progressStage: "finalizing",
           progressMessage: "Генерация сцены завершена",
           completedAt: new Date(),
         },

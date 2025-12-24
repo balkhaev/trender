@@ -7,6 +7,10 @@ import {
   GenerationStatusResponseSchema,
   GenerationsListResponseSchema,
   NotFoundResponseSchema,
+  PublishGenerationRequestSchema,
+  PublishGenerationResponseSchema,
+  SocialShareRequestSchema,
+  SocialShareResponseSchema,
   VideoGenerationListQuerySchema,
 } from "../schemas";
 import { sceneGenJobQueue, videoGenJobQueue } from "../services/queues";
@@ -642,7 +646,269 @@ app.openapi(compositeStatusRoute, async (c) => {
         result: { videoUrl: composite.videoUrl },
       }),
     error: composite.error ?? undefined,
+  }) as any;
+});
+
+// ============================================
+// POST /{generationId}/publish - Publish generation
+// ============================================
+
+const publishRoute = createRoute({
+  method: "post",
+  path: "/{generationId}/publish",
+  summary: "Publish generation",
+  tags: ["Generate"],
+  description: "Share the generation with the community and create a template.",
+  request: {
+    params: z.object({
+      generationId: z.string().openapi({ description: "Generation ID" }),
+    }),
+    body: {
+      content: {
+        "application/json": {
+          schema: PublishGenerationRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: PublishGenerationResponseSchema,
+        },
+      },
+      description: "Generation published",
+    },
+    404: {
+      description: "Generation not found",
+    },
+  },
+});
+
+app.openapi(publishRoute, async (c) => {
+  const { generationId } = c.req.valid("param");
+  const { isShared, communityConsent, title } = c.req.valid("json");
+
+  const generation = await prisma.videoGeneration.findUnique({
+    where: { id: generationId },
+    include: { analysis: true },
   });
+
+  if (!generation) {
+    return c.json({ error: "Generation not found" }, 404);
+  }
+
+  let templateId: string | undefined;
+
+  if (isShared && communityConsent) {
+    // Create a new template from this generation
+    const template = await prisma.template.create({
+      data: {
+        title: title || generation.analysis.fileName || "Shared Generation",
+        analysisId: generation.analysisId,
+        reelId: generation.analysis.sourceId || "", // Assuming sourceId is reelId for now
+        isPublished: true,
+        isFeatured: false,
+        tags: generation.analysis.tags || [],
+        generationCount: 1,
+      },
+    });
+    templateId = template.id;
+  }
+
+  return c.json({
+    success: true,
+    templateId,
+  });
+});
+
+// ============================================
+// POST /{generationId}/share - Share generation
+// ============================================
+
+const shareRoute = createRoute({
+  method: "post",
+  path: "/{generationId}/share",
+  summary: "Share generation",
+  tags: ["Generate"],
+  description: "Log a share action for the generation.",
+  request: {
+    params: z.object({
+      generationId: z.string().openapi({ description: "Generation ID" }),
+    }),
+    body: {
+      content: {
+        "application/json": {
+          schema: SocialShareRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      content: {
+        "application/json": {
+          schema: SocialShareResponseSchema,
+        },
+      },
+      description: "Share action logged",
+    },
+    404: {
+      description: "Generation not found",
+    },
+  },
+});
+
+app.openapi(shareRoute, async (c) => {
+  const { generationId } = c.req.valid("param");
+  const { platform: _platform } = c.req.valid("json");
+
+  const generation = await prisma.videoGeneration.findUnique({
+    where: { id: generationId },
+  });
+
+  if (!generation) {
+    return c.json({ error: "Generation not found" }, 404);
+  }
+
+  // Logic to log share action or generate platform-specific URLs
+  // For now just return success
+  return c.json({
+    success: true,
+    shareUrl: generation.videoUrl || undefined,
+  });
+});
+
+// ============================================
+// POST /scene/{sceneId}/regenerate - Regenerate a specific scene
+// ============================================
+
+const regenerateSceneRoute = createRoute({
+  method: "post",
+  path: "/scene/{sceneId}/regenerate",
+  summary: "Regenerate a specific scene",
+  tags: ["Generate"],
+  description:
+    "Start regeneration of a specific scene with optional new prompt.",
+  request: {
+    params: z.object({
+      sceneId: z.string().openapi({ description: "Scene ID" }),
+    }),
+    body: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            prompt: z.string().optional().openapi({
+              description:
+                "Custom prompt for regeneration. If not provided, uses the last generation prompt.",
+            }),
+            duration: z.union([z.literal(5), z.literal(10)]).optional(),
+            aspectRatio: z.enum(["16:9", "9:16", "1:1", "auto"]).optional(),
+            keepAudio: z.boolean().optional(),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    202: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            success: z.boolean(),
+            sceneGenerationId: z.string(),
+            status: z.string(),
+          }),
+        },
+      },
+      description: "Scene regeneration started",
+    },
+    404: {
+      content: {
+        "application/json": {
+          schema: NotFoundResponseSchema,
+        },
+      },
+      description: "Scene not found",
+    },
+    400: {
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+      description: "Bad request",
+    },
+  },
+});
+
+app.openapi(regenerateSceneRoute, async (c) => {
+  const { sceneId } = c.req.valid("param");
+  const { prompt, duration, aspectRatio, keepAudio } = c.req.valid("json");
+
+  // Get the scene with analysis and reel
+  const scene = await prisma.videoScene.findUnique({
+    where: { id: sceneId },
+    include: {
+      analysis: {
+        include: {
+          template: {
+            include: {
+              reel: true,
+            },
+          },
+        },
+      },
+      generations: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
+    },
+  });
+
+  if (!scene) {
+    return c.json({ error: "Scene not found" }, 404);
+  }
+
+  // Get source video URL
+  const reel = scene.analysis.template?.reel;
+  if (!reel) {
+    return c.json({ error: "Source video not found" }, 400);
+  }
+
+  const sourceVideoUrl = buildReelVideoUrl(reel);
+  if (!sourceVideoUrl) {
+    return c.json({ error: "Source video URL not available" }, 400);
+  }
+
+  // Use provided prompt or fallback to last generation's prompt
+  const lastGeneration = scene.generations[0];
+  const finalPrompt =
+    prompt || lastGeneration?.prompt || "Transform this scene";
+
+  // Start scene generation
+  const sceneGenerationId = await sceneGenJobQueue.startSceneGeneration(
+    sceneId,
+    finalPrompt,
+    sourceVideoUrl,
+    scene.startTime,
+    scene.endTime,
+    {
+      duration: duration || 5,
+      aspectRatio: aspectRatio || "auto",
+      keepAudio,
+    }
+  );
+
+  return c.json(
+    {
+      success: true,
+      sceneGenerationId,
+      status: "queued",
+    },
+    202
+  );
 });
 
 export { app as generateRouter };

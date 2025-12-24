@@ -876,3 +876,33 @@ export async function getCompositeStatus(
 
   return response.json();
 }
+
+/**
+ * Перегенерировать конкретную сцену
+ */
+export async function regenerateScene(
+  sceneId: string,
+  options?: {
+    prompt?: string;
+    duration?: 5 | 10;
+    aspectRatio?: "16:9" | "9:16" | "1:1" | "auto";
+    keepAudio?: boolean;
+  }
+): Promise<{ success: boolean; sceneGenerationId: string; status: string }> {
+  const response = await fetch(
+    `${API_URL}/api/generate/scene/${sceneId}/regenerate`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(options || {}),
+      credentials: "include",
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to regenerate scene");
+  }
+
+  return response.json();
+}
