@@ -69,7 +69,16 @@ const generateRoute = createRoute({
 });
 
 app.openapi(generateRoute, async (c) => {
-  const { analysisId, selections, keepAudio } = c.req.valid("json");
+  const {
+    analysisId,
+    selections,
+    keepAudio,
+    prompt: customPrompt,
+    negativePrompt: customNegativePrompt,
+    duration: customDuration,
+    aspectRatio: customAspectRatio,
+    imageUrls: customImageUrls,
+  } = c.req.valid("json");
 
   try {
     // 1. Загружаем анализ с элементами, сценами и reel
@@ -177,12 +186,15 @@ app.openapi(generateRoute, async (c) => {
       }
     }
 
-    // 5. Параметры из анализа
-    const duration = (
-      analysis.duration && analysis.duration <= 10 ? analysis.duration : 5
-    ) as 5 | 10;
+    // 5. Параметры: кастомные или из анализа
+    const duration =
+      customDuration ??
+      ((analysis.duration && analysis.duration <= 10 ? analysis.duration : 5) as
+        | 5
+        | 10);
     const aspectRatio =
-      (analysis.aspectRatio as "16:9" | "9:16" | "1:1" | "auto") || "auto";
+      customAspectRatio ??
+      ((analysis.aspectRatio as "16:9" | "9:16" | "1:1" | "auto") || "auto");
 
     // Преобразуем selections в формат для buildPromptFromSelections
     const elementSelections = (selections || []).map((sel) => ({
@@ -192,11 +204,15 @@ app.openapi(generateRoute, async (c) => {
       customPrompt: sel.customPrompt,
     }));
 
-    // 6. Строим промпт из selections
-    const { prompt, imageUrls, negativePrompt } = buildPromptFromSelections(
-      elements,
-      elementSelections
-    );
+    // 6. Строим промпт из selections или используем кастомные значения
+    const builtPrompt = buildPromptFromSelections(elements, elementSelections);
+
+    const prompt = customPrompt ?? builtPrompt.prompt;
+    const negativePrompt = customNegativePrompt ?? builtPrompt.negativePrompt;
+    const imageUrls =
+      customImageUrls && customImageUrls.length > 0
+        ? customImageUrls
+        : builtPrompt.imageUrls;
 
     // 7. Определяем тип генерации
     const hasScenes = analysis.hasScenes && analysis.videoScenes.length > 1;
@@ -256,15 +272,24 @@ app.openapi(generateRoute, async (c) => {
           });
         } else {
           // Есть изменения - генерируем
-          const {
-            prompt: scenePrompt,
-            imageUrls: sceneImageUrls,
-            negativePrompt: sceneNegativePrompt,
-          } = buildPromptFromSelections(sceneElements, sceneSelections);
+          const sceneBuiltPrompt = buildPromptFromSelections(
+            sceneElements,
+            sceneSelections
+          );
+
+          // Используем кастомные значения, если переданы
+          const scenePrompt =
+            customPrompt ?? sceneBuiltPrompt.prompt ?? "Transform this scene";
+          const sceneImageUrls =
+            customImageUrls && customImageUrls.length > 0
+              ? customImageUrls
+              : sceneBuiltPrompt.imageUrls;
+          const sceneNegativePrompt =
+            customNegativePrompt ?? sceneBuiltPrompt.negativePrompt;
 
           const sceneGenerationId = await sceneGenJobQueue.startSceneGeneration(
             scene.id,
-            scenePrompt || "Transform this scene",
+            scenePrompt,
             sourceVideoUrl,
             scene.startTime,
             scene.endTime,

@@ -386,6 +386,37 @@ export const GenerateRequestSchema = z
     keepAudio: z.boolean().default(false).openapi({
       description: "Сохранить аудио из оригинального видео",
     }),
+    prompt: z.string().optional().openapi({
+      description:
+        "Кастомный промпт для генерации. Если не указан - строится автоматически из selections",
+      example: "Transform this video into a cyberpunk scene",
+    }),
+    negativePrompt: z.string().optional().openapi({
+      description: "Негативный промпт (что не должно быть в видео)",
+      example: "blurry, low quality, distorted",
+    }),
+    duration: z
+      .preprocess(
+        (val) => (typeof val === "string" ? Number(val) : val),
+        z.union([z.literal(5), z.literal(10)])
+      )
+      .optional()
+      .openapi({
+        description:
+          "Длительность видео в секундах. По умолчанию берётся из анализа",
+        example: 5,
+      }),
+    aspectRatio: z.enum(["16:9", "9:16", "1:1", "auto"]).optional().openapi({
+      description: "Соотношение сторон. По умолчанию берётся из анализа",
+      example: "9:16",
+    }),
+    imageUrls: z
+      .array(z.string().url())
+      .optional()
+      .openapi({
+        description: "URL референсных изображений для Kling imageList",
+        example: ["https://example.com/ref1.jpg"],
+      }),
   })
   .openapi("GenerateRequest");
 

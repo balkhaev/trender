@@ -386,7 +386,12 @@ export function FlatElementList({
 
   useEffect(() => {
     const serialized = JSON.stringify(
-      selections.map((s) => s.elementId + s.selectedOptionId)
+      selections.map((s) => ({
+        id: s.elementId,
+        optionId: s.selectedOptionId,
+        customPrompt: s.customPrompt,
+        customImageUrl: s.customImageUrl,
+      }))
     );
     if (serialized !== lastNotifiedRef.current) {
       lastNotifiedRef.current = serialized;
