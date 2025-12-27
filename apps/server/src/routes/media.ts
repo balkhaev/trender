@@ -161,23 +161,33 @@ app.openapi(uploadMediaRoute, async (c) => {
   try {
     const formData = await c.req.formData();
     
-    // Debug: log all form data keys
-    console.log("FormData keys:", Array.from(formData.keys()));
-    console.log("FormData entries:", Array.from(formData.entries()).map(([key, val]) => ({
-      key,
-      valueType: typeof val,
-      isBlob: val instanceof Blob,
-    })));
+    // Try to get file - support both correct and malformed Content-Disposition headers
+    let file = formData.get("file");
     
-    const file = formData.get("file");
+    // Workaround for malformed Content-Disposition without quotes on name value
+    // If "file" key doesn't exist, look for keys starting with "file"
+    if (!file) {
+      const entries = Array.from(formData.entries());
+      const fileEntry = entries.find(([key]) => key.startsWith("file"));
+      if (fileEntry) {
+        file = fileEntry[1];
+        console.log("Found file with malformed key:", fileEntry[0]);
+      }
+    }
 
     // Check if file exists and is either File or Blob
     if (!file || !(file instanceof Blob)) {
       return c.json({ 
         error: "File is required",
         debug: {
-          formDataKeys: Array.from(formData.keys()),
           fileExists: !!file,
+          fileType: typeof file,
+          constructor: file?.constructor?.name,
+          isBlob: file instanceof Blob,
+          isFile: file instanceof File,
+          hasArrayBuffer: typeof (file as any)?.arrayBuffer === 'function',
+          hasSize: 'size' in (file || {}),
+          hasType: 'type' in (file || {}),
         }
       }, 400);
     }
