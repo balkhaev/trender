@@ -2,7 +2,8 @@ export {
   type DownloadProgressCallbacks,
   type DownloadResult,
   downloadReel,
-  type ResizeResult,
+  type NormalizeResult,
+  normalizeVideoIfNeeded,
   resizeVideoIfNeeded,
   videoDownloadService,
 } from "./video-download.service";

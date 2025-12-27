@@ -106,6 +106,27 @@ def get_video_duration(video_path: str) -> Optional[float]:
         return None
 
 
+def has_audio_stream(video_path: str) -> bool:
+    """Check if video has an audio stream"""
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v", "error",
+                "-select_streams", "a",
+                "-show_entries", "stream=index",
+                "-of", "csv=p=0",
+                video_path
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        return bool(result.stdout.strip())
+    except Exception:
+        return False
+
+
 def get_video_dimensions(video_path: str) -> Optional[tuple[int, int]]:
     """Get video width and height using ffprobe"""
     try:
@@ -287,6 +308,33 @@ def trim_video_ffmpeg(
     return True
 
 
+def get_video_par(video_path: str) -> tuple[int, int] | None:
+    """Get video Pixel Aspect Ratio using ffprobe"""
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "stream=sample_aspect_ratio",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                video_path
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        sar = result.stdout.strip()
+        if not sar or sar == "N/A" or sar == "1:1":
+            return (1, 1)
+        parts = sar.split(":")
+        if len(parts) == 2:
+            return (int(parts[0]), int(parts[1]))
+        return None
+    except Exception:
+        return None
+
+
 def normalize_video_par(video_path: str, output_path: str) -> bool:
     """
     Normalize video Pixel Aspect Ratio to 1:1 (square pixels).
@@ -299,10 +347,20 @@ def normalize_video_par(video_path: str, output_path: str) -> bool:
     Returns:
         True if successful
     """
+    # Check current PAR
+    par = get_video_par(video_path)
+    if par == (1, 1):
+        # Already square pixels, just copy
+        import shutil
+        shutil.copy(video_path, output_path)
+        return True
+
+    # Use scale filter with explicit SAR reset for reliable normalization
+    # scale=iw*sar:ih ensures proper pixel conversion, then setsar=1 marks it as square
     cmd = [
         "ffmpeg",
         "-i", video_path,
-        "-vf", "setsar=1:1,scale=iw:ih",
+        "-vf", "scale=iw*sar:ih,setsar=1",
         "-c:v", "libx264",
         "-preset", "fast",
         "-c:a", "copy",
@@ -487,27 +545,59 @@ def extend_video_with_black(
 
     width, height = dimensions
     extension_duration = target_duration - current_duration
+    video_has_audio = has_audio_stream(video_path)
 
     # Create black video segment and concatenate with original
     # Using complex filter to extend with black frames
-    cmd = [
-        "ffmpeg",
-        "-i", video_path,
-        "-f", "lavfi",
-        "-i", f"color=c=black:s={width}x{height}:d={extension_duration}:r=30",
-        "-f", "lavfi",
-        "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
-        "-filter_complex",
-        f"[2:a]atrim=0:{extension_duration}[black_audio];[0:v][0:a][1:v][black_audio]concat=n=2:v=1:a=1[outv][outa]",
-        "-map", "[outv]",
-        "-map", "[outa]",
-        "-c:v", "libx264",
-        "-c:a", "aac",
-        "-preset", "fast",
-        "-movflags", "+faststart",
-        output_path,
-        "-y"
-    ]
+    if video_has_audio:
+        # Video has audio - concat both streams
+        filter_complex = (
+            f"[2:a]atrim=0:{extension_duration}[black_audio];"
+            f"[0:v][0:a][1:v][black_audio]concat=n=2:v=1:a=1[outv][outa]"
+        )
+        cmd = [
+            "ffmpeg",
+            "-i", video_path,
+            "-f", "lavfi",
+            "-i", f"color=c=black:s={width}x{height}:d={extension_duration}:r=30",
+            "-f", "lavfi",
+            "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+            "-filter_complex", filter_complex,
+            "-map", "[outv]",
+            "-map", "[outa]",
+            "-c:v", "libx264",
+            "-c:a", "aac",
+            "-preset", "fast",
+            "-movflags", "+faststart",
+            output_path,
+            "-y"
+        ]
+    else:
+        # Video has no audio - add silent audio to both parts and concat
+        filter_complex = (
+            f"[2:a]atrim=0:{current_duration}[orig_audio];"
+            f"[3:a]atrim=0:{extension_duration}[black_audio];"
+            f"[0:v][orig_audio][1:v][black_audio]concat=n=2:v=1:a=1[outv][outa]"
+        )
+        cmd = [
+            "ffmpeg",
+            "-i", video_path,
+            "-f", "lavfi",
+            "-i", f"color=c=black:s={width}x{height}:d={extension_duration}:r=30",
+            "-f", "lavfi",
+            "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+            "-f", "lavfi",
+            "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+            "-filter_complex", filter_complex,
+            "-map", "[outv]",
+            "-map", "[outa]",
+            "-c:v", "libx264",
+            "-c:a", "aac",
+            "-preset", "fast",
+            "-movflags", "+faststart",
+            output_path,
+            "-y"
+        ]
 
     result = subprocess.run(
         cmd,
@@ -935,6 +1025,159 @@ async def resize_video(
         raise HTTPException(status_code=500, detail=f"Unexpected error: {e}")
 
 
+class NormalizeResponse(BaseModel):
+    """Response with normalized video info"""
+    success: bool
+    original_width: int
+    original_height: int
+    new_width: int
+    new_height: int
+    original_par: str
+    normalized_par: str
+    was_resized: bool
+    was_par_normalized: bool
+    duration_sec: Optional[float] = None
+    error: Optional[str] = None
+
+
+@app.post("/normalize")
+async def normalize_video(
+    video: UploadFile = File(...),
+    min_width: int = Form(default=720),
+    target_width: int = Form(default=1080)
+):
+    """
+    Normalize video: fix PAR to 1:1 and resize if needed for Kling API compatibility.
+    Combines PAR normalization and resize in one operation.
+
+    - **video**: Video file (mp4, webm, etc.)
+    - **min_width**: Minimum width required (default: 720)
+    - **target_width**: Target width for upscaling (default: 1080)
+
+    Returns normalized video as streaming response with metadata headers:
+    - X-Original-Width, X-Original-Height: Original dimensions
+    - X-New-Width, X-New-Height: New dimensions
+    - X-Original-PAR: Original Pixel Aspect Ratio
+    - X-Was-Resized: "true" if video was resized
+    - X-Was-PAR-Normalized: "true" if PAR was normalized
+    """
+    if min_width <= 0:
+        raise HTTPException(status_code=400, detail="min_width must be positive")
+
+    if target_width < min_width:
+        raise HTTPException(status_code=400, detail="target_width must be >= min_width")
+
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_path = os.path.join(tmpdir, "input_video.mp4")
+            par_normalized_path = os.path.join(tmpdir, "par_normalized.mp4")
+            output_path = os.path.join(tmpdir, "output_normalized.mp4")
+
+            # Write uploaded video to temp file
+            content = await video.read()
+            with open(input_path, "wb") as f:
+                f.write(content)
+
+            # Get original video info
+            dimensions = get_video_dimensions(input_path)
+            if not dimensions:
+                raise HTTPException(status_code=400, detail="Could not determine video dimensions")
+
+            original_width, original_height = dimensions
+            duration = get_video_duration(input_path)
+            original_par = get_video_par(input_path)
+            original_par_str = f"{original_par[0]}:{original_par[1]}" if original_par else "unknown"
+
+            was_par_normalized = False
+            was_resized = False
+            current_path = input_path
+
+            # Step 1: Normalize PAR if needed
+            if original_par and original_par != (1, 1):
+                print(f"[normalize] Normalizing PAR from {original_par_str} to 1:1")
+                normalize_video_par(input_path, par_normalized_path)
+                current_path = par_normalized_path
+                was_par_normalized = True
+
+                # Get dimensions after PAR normalization (they may change)
+                new_dims = get_video_dimensions(par_normalized_path)
+                if new_dims:
+                    original_width, original_height = new_dims
+
+            # Step 2: Resize if needed
+            new_width = original_width
+            new_height = original_height
+
+            if original_width < min_width:
+                new_width = min_width
+            elif original_width < target_width:
+                new_width = target_width
+
+            if new_width != original_width:
+                print(f"[normalize] Resizing from {original_width}x{original_height} to width={new_width}")
+                resize_video_ffmpeg(current_path, output_path, new_width)
+                current_path = output_path
+                was_resized = True
+
+                # Get final dimensions
+                final_dims = get_video_dimensions(output_path)
+                if final_dims:
+                    new_width, new_height = final_dims
+            else:
+                new_height = original_height
+
+            # If nothing changed, return original
+            if not was_par_normalized and not was_resized:
+                def iterfile():
+                    yield content
+
+                return StreamingResponse(
+                    iterfile(),
+                    media_type="video/mp4",
+                    headers={
+                        "Content-Disposition": "attachment; filename=video.mp4",
+                        "X-Original-Width": str(original_width),
+                        "X-Original-Height": str(original_height),
+                        "X-New-Width": str(original_width),
+                        "X-New-Height": str(original_height),
+                        "X-Original-PAR": original_par_str,
+                        "X-Was-Resized": "false",
+                        "X-Was-PAR-Normalized": "false",
+                        "X-Video-Duration": str(duration) if duration else "",
+                    }
+                )
+
+            # Read the output file
+            with open(current_path, "rb") as f:
+                video_bytes = f.read()
+
+            def iterfile():
+                yield video_bytes
+
+            return StreamingResponse(
+                iterfile(),
+                media_type="video/mp4",
+                headers={
+                    "Content-Disposition": "attachment; filename=normalized_video.mp4",
+                    "X-Original-Width": str(dimensions[0]),
+                    "X-Original-Height": str(dimensions[1]),
+                    "X-New-Width": str(new_width),
+                    "X-New-Height": str(new_height),
+                    "X-Original-PAR": original_par_str,
+                    "X-Was-Resized": "true" if was_resized else "false",
+                    "X-Was-PAR-Normalized": "true" if was_par_normalized else "false",
+                    "X-Video-Duration": str(duration) if duration else "",
+                }
+            )
+
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="Video processing timed out")
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {e}")
+
+
 @app.post("/detect-scenes", response_model=SceneDetectionResponse)
 async def detect_scenes(
     video: UploadFile = File(...),
@@ -971,12 +1214,23 @@ async def detect_scenes(
             # Get video duration
             duration = get_video_duration(video_path)
 
-            # Normalize PAR to 1:1 (required for PySceneDetect)
+            # Check and normalize PAR to 1:1 (required for PySceneDetect)
+            par = get_video_par(video_path)
+            print(f"[detect-scenes] Video PAR: {par}")
+
             try:
                 normalize_video_par(video_path, normalized_path)
                 scene_video_path = normalized_path
-            except RuntimeError:
-                # Fallback to original if normalization fails
+                print(f"[detect-scenes] PAR normalized successfully")
+            except RuntimeError as e:
+                print(f"[detect-scenes] PAR normalization failed: {e}")
+                # If PAR is not square and normalization failed, we cannot proceed
+                if par and par != (1, 1):
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"VideoNormalize failed, non-square pixels detected (PAR {par[0]}:{par[1]}). Normalization error: {e}"
+                    )
+                # PAR is already square or unknown, try with original
                 scene_video_path = video_path
 
             # Detect scenes

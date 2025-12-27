@@ -397,7 +397,9 @@ const removeBookmarkRoute = createRoute({
   },
 });
 
-export const templatesRouter = new OpenAPIHono();
+import { validationHook } from "../utils/validation-hook";
+
+export const templatesRouter = new OpenAPIHono({ defaultHook: validationHook });
 
 // Feed handler
 templatesRouter.openapi(feedRoute, async (c) => {

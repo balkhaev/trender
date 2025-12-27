@@ -11,8 +11,9 @@ import {
 } from "../schemas";
 import { getS3Key, isS3Configured, s3Service } from "../services/s3";
 import { getMediaPublicUrl } from "../services/url-builder";
+import { validationHook } from "../utils/validation-hook";
 
-const app = new OpenAPIHono();
+const app = new OpenAPIHono({ defaultHook: validationHook });
 
 const ALLOWED_IMAGE_TYPES = [
   "image/jpeg",

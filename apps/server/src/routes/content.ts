@@ -13,6 +13,7 @@ import {
 import { getDownloadsPath } from "../services/instagram/downloader";
 import { pipelineJobQueue } from "../services/queues";
 import { getS3Key, isS3Configured, s3Service } from "../services/s3";
+import { validationHook } from "../utils/validation-hook";
 
 const INSTAGRAM_URL_REGEX = /\/(?:reel|p)\/([a-zA-Z0-9_-]+)/;
 
@@ -21,7 +22,7 @@ function extractShortcode(url: string): string | null {
   return match?.[1] ?? null;
 }
 
-const app = new OpenAPIHono();
+const app = new OpenAPIHono({ defaultHook: validationHook });
 
 // ============================================
 // POST /from-url - Add content from Instagram URL

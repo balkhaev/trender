@@ -8,8 +8,9 @@ import {
 } from "../schemas";
 import type { AspectRatio, AssetCategory } from "../services/imagen";
 import { getImagenService } from "../services/imagen";
+import { validationHook } from "../utils/validation-hook";
 
-const app = new OpenAPIHono();
+const app = new OpenAPIHono({ defaultHook: validationHook });
 
 // ============================================
 // POST /generate - Generate asset via Imagen

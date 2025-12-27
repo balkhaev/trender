@@ -1142,35 +1142,40 @@ reelsRouter.openapi(resizeReelRoute, async (c) => {
       return c.json({ error: "No video source available" }, 500);
     }
 
-    // Call video-frames service for resize
+    // Call video-frames service for normalize (includes PAR fix + resize)
     const formData = new FormData();
     formData.append(
       "video",
       new Blob([videoBuffer], { type: "video/mp4" }),
       "video.mp4"
     );
+    formData.append("min_width", "720");
+    formData.append("target_width", "1080");
 
-    const response = await fetch(`${VIDEO_FRAMES_SERVICE_URL}/resize`, {
+    const response = await fetch(`${VIDEO_FRAMES_SERVICE_URL}/normalize`, {
       method: "POST",
       body: formData,
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      return c.json({ error: `Resize failed: ${errorText}` }, 500);
+      return c.json({ error: `Normalize failed: ${errorText}` }, 500);
     }
 
-    // Get resized video
-    const resizedBuffer = Buffer.from(await response.arrayBuffer());
+    // Get normalized video
+    const normalizedBuffer = Buffer.from(await response.arrayBuffer());
 
-    const resized = response.headers.get("X-Resized") === "true";
+    const wasResized = response.headers.get("X-Was-Resized") === "true";
+    const wasParNormalized =
+      response.headers.get("X-Was-PAR-Normalized") === "true";
     const originalWidth = response.headers.get("X-Original-Width");
     const newWidth = response.headers.get("X-New-Width");
+    const originalPar = response.headers.get("X-Original-PAR");
 
-    if (resized) {
+    if (wasResized || wasParNormalized) {
       // Upload to S3
       const s3Key = `reels/${id}.mp4`;
-      await s3Service.uploadFile(s3Key, resizedBuffer, "video/mp4");
+      await s3Service.uploadFile(s3Key, normalizedBuffer, "video/mp4");
 
       // Update reel record
       await prisma.reel.update({
@@ -1178,11 +1183,19 @@ reelsRouter.openapi(resizeReelRoute, async (c) => {
         data: { s3Key },
       });
 
+      const changes: string[] = [];
+      if (wasParNormalized) {
+        changes.push(`PAR ${originalPar} → 1:1`);
+      }
+      if (wasResized) {
+        changes.push(`${originalWidth}px → ${newWidth}px`);
+      }
+
       return c.json(
         {
           success: true,
-          message: `Video resized from ${originalWidth}px to ${newWidth}px`,
-          resized: true,
+          message: `Видео нормализовано: ${changes.join(", ")}`,
+          resized: wasResized || wasParNormalized,
           originalWidth: Number(originalWidth),
           newWidth: Number(newWidth),
         },
@@ -1193,14 +1206,14 @@ reelsRouter.openapi(resizeReelRoute, async (c) => {
     return c.json(
       {
         success: true,
-        message: "Video already within size limits",
+        message: "Видео уже нормализовано",
         resized: false,
       },
       200
     );
   } catch (error) {
-    console.error("Resize reel error:", error);
-    return c.json({ error: "Failed to resize video" }, 500);
+    console.error("Normalize reel error:", error);
+    return c.json({ error: "Failed to normalize video" }, 500);
   }
 });
 

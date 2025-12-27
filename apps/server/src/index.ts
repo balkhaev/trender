@@ -16,11 +16,12 @@ import { trendsRouter } from "./routes/trends";
 import { trimRouter } from "./routes/trim";
 import { video } from "./routes/video";
 import { closeAllQueues, initAllWorkers } from "./services/queues";
+import { validationHook } from "./utils/validation-hook";
 
 // ============================================
 // PUBLIC API (клиентский флоу)
 // ============================================
-const publicApi = new OpenAPIHono();
+const publicApi = new OpenAPIHono({ defaultHook: validationHook });
 
 // Public routes
 publicApi.route("/templates", templatesRouter);
@@ -40,7 +41,7 @@ publicApi.route("/assets", assetsRouterModule.assetsRouter);
 // ============================================
 // INTERNAL API (админка, дебаг)
 // ============================================
-const internalApi = new OpenAPIHono();
+const internalApi = new OpenAPIHono({ defaultHook: validationHook });
 
 internalApi.openAPIRegistry.registerComponent("securitySchemes", "BearerAuth", {
   type: "http",

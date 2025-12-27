@@ -501,7 +501,7 @@ export default function ReelDetailPage() {
                   </Button>
                 )}
 
-                {/* Resize button - only show when video exists */}
+                {/* Normalize button - only show when video exists */}
                 {hasVideo(data.reel) && (
                   <Button
                     className="transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
@@ -514,7 +514,7 @@ export default function ReelDetailPage() {
                     ) : (
                       <Maximize className="mr-2 h-4 w-4" />
                     )}
-                    Увеличить для Kling
+                    Нормализовать видео
                   </Button>
                 )}
 

@@ -17,8 +17,9 @@ import { sceneGenJobQueue, videoGenJobQueue } from "../services/queues";
 import { getExternalReelVideoUrl } from "../services/s3";
 import { getGenerationVideoPublicUrl } from "../services/url-builder";
 import { buildPromptFromSelections } from "../utils/prompt-builder";
+import { validationHook } from "../utils/validation-hook";
 
-const app = new OpenAPIHono();
+const app = new OpenAPIHono({ defaultHook: validationHook });
 
 // ============================================
 // POST / - Start generation

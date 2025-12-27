@@ -48,22 +48,26 @@ export type DownloadResult = {
 };
 
 /**
- * Result of resize operation
+ * Result of normalize operation
  */
-export type ResizeResult = {
+export type NormalizeResult = {
   buffer: Buffer;
   duration: number | null;
+  wasResized: boolean;
+  wasParNormalized: boolean;
 };
 
 /**
- * Resize video for Kling API compatibility (requires 720-2160px width)
- * Uses video-frames service
+ * Normalize video for Kling API compatibility:
+ * - Fix PAR to 1:1 (square pixels)
+ * - Resize if needed (requires 720-2160px width)
+ * Uses video-frames service /normalize endpoint
  */
-export async function resizeVideoIfNeeded(
+export async function normalizeVideoIfNeeded(
   buffer: Buffer,
   reelId: string,
   callbacks?: Pick<DownloadProgressCallbacks, "updateProgress">
-): Promise<ResizeResult> {
+): Promise<NormalizeResult> {
   try {
     const formData = new FormData();
     formData.append(
@@ -74,37 +78,80 @@ export async function resizeVideoIfNeeded(
     formData.append("min_width", "720");
     formData.append("target_width", "1080");
 
-    const response = await fetch(`${VIDEO_FRAMES_SERVICE_URL}/resize`, {
+    const response = await fetch(`${VIDEO_FRAMES_SERVICE_URL}/normalize`, {
       method: "POST",
       body: formData,
     });
 
     if (!response.ok) {
-      return { buffer, duration: null };
+      const errorText = await response.text();
+      console.error(`[normalizeVideoIfNeeded] Failed: ${errorText}`);
+      return {
+        buffer,
+        duration: null,
+        wasResized: false,
+        wasParNormalized: false,
+      };
     }
 
-    const resized = response.headers.get("X-Resized") === "true";
+    const wasResized = response.headers.get("X-Was-Resized") === "true";
+    const wasParNormalized =
+      response.headers.get("X-Was-PAR-Normalized") === "true";
     const originalWidth = response.headers.get("X-Original-Width");
     const newWidth = response.headers.get("X-New-Width");
+    const originalPar = response.headers.get("X-Original-PAR");
     const durationHeader = response.headers.get("X-Video-Duration");
     const duration = durationHeader
       ? Math.round(Number.parseFloat(durationHeader))
       : null;
 
-    if (resized && callbacks?.updateProgress) {
-      await callbacks.updateProgress(
-        reelId,
-        "download",
-        60,
-        `Видео увеличено: ${originalWidth}px → ${newWidth}px`
-      );
+    if (callbacks?.updateProgress) {
+      const changes: string[] = [];
+      if (wasParNormalized) {
+        changes.push(`PAR ${originalPar} → 1:1`);
+      }
+      if (wasResized) {
+        changes.push(`${originalWidth}px → ${newWidth}px`);
+      }
+      if (changes.length > 0) {
+        await callbacks.updateProgress(
+          reelId,
+          "download",
+          60,
+          `Видео нормализовано: ${changes.join(", ")}`
+        );
+      }
     }
 
-    const resizedBuffer = await response.arrayBuffer();
-    return { buffer: Buffer.from(resizedBuffer), duration };
-  } catch {
-    return { buffer, duration: null };
+    const normalizedBuffer = await response.arrayBuffer();
+    return {
+      buffer: Buffer.from(normalizedBuffer),
+      duration,
+      wasResized,
+      wasParNormalized,
+    };
+  } catch (error) {
+    console.error("[normalizeVideoIfNeeded] Error:", error);
+    return {
+      buffer,
+      duration: null,
+      wasResized: false,
+      wasParNormalized: false,
+    };
   }
+}
+
+/**
+ * @deprecated Use normalizeVideoIfNeeded instead
+ * Kept for backward compatibility
+ */
+export async function resizeVideoIfNeeded(
+  buffer: Buffer,
+  reelId: string,
+  callbacks?: Pick<DownloadProgressCallbacks, "updateProgress">
+): Promise<{ buffer: Buffer; duration: number | null }> {
+  const result = await normalizeVideoIfNeeded(buffer, reelId, callbacks);
+  return { buffer: result.buffer, duration: result.duration };
 }
 
 /**
@@ -257,18 +304,22 @@ export async function downloadReel(
       "Получение видео..."
     );
 
-    // Resize if needed for Kling API
+    // Normalize video (PAR fix + resize) for Kling API
     await callbacks.updateProgress(
       reelId,
       "download",
       55,
-      "Проверка размера видео..."
+      "Нормализация видео..."
     );
-    const resizeResult = await resizeVideoIfNeeded(buffer, reelId, callbacks);
-    buffer = resizeResult.buffer;
+    const normalizeResult = await normalizeVideoIfNeeded(
+      buffer,
+      reelId,
+      callbacks
+    );
+    buffer = normalizeResult.buffer;
 
-    // Use duration from metadata, fallback to duration from resize (ffprobe)
-    const duration = metadataDuration || resizeResult.duration;
+    // Use duration from metadata, fallback to duration from normalize (ffprobe)
+    const duration = metadataDuration || normalizeResult.duration;
     if (duration) {
       console.log(
         `  ✓ Video duration: ${duration}s (source: ${metadataDuration ? "metadata" : "ffprobe"})`
@@ -379,11 +430,22 @@ class VideoDownloadService {
     return downloadReel(reelId, callbacks);
   }
 
+  async normalizeVideoIfNeeded(
+    buffer: Buffer,
+    reelId: string,
+    callbacks?: Pick<DownloadProgressCallbacks, "updateProgress">
+  ): Promise<NormalizeResult> {
+    return normalizeVideoIfNeeded(buffer, reelId, callbacks);
+  }
+
+  /**
+   * @deprecated Use normalizeVideoIfNeeded instead
+   */
   async resizeVideoIfNeeded(
     buffer: Buffer,
     reelId: string,
     callbacks?: Pick<DownloadProgressCallbacks, "updateProgress">
-  ): Promise<ResizeResult> {
+  ): Promise<{ buffer: Buffer; duration: number | null }> {
     return resizeVideoIfNeeded(buffer, reelId, callbacks);
   }
 }
