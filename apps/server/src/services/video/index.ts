@@ -4,7 +4,6 @@ export {
   downloadReel,
   type NormalizeResult,
   normalizeVideoIfNeeded,
-  resizeVideoIfNeeded,
   videoDownloadService,
 } from "./video-download.service";
 

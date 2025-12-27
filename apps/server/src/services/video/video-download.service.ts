@@ -142,19 +142,6 @@ export async function normalizeVideoIfNeeded(
 }
 
 /**
- * @deprecated Use normalizeVideoIfNeeded instead
- * Kept for backward compatibility
- */
-export async function resizeVideoIfNeeded(
-  buffer: Buffer,
-  reelId: string,
-  callbacks?: Pick<DownloadProgressCallbacks, "updateProgress">
-): Promise<{ buffer: Buffer; duration: number | null }> {
-  const result = await normalizeVideoIfNeeded(buffer, reelId, callbacks);
-  return { buffer: result.buffer, duration: result.duration };
-}
-
-/**
  * Fetch metadata for a reel from Instagram
  */
 async function fetchReelMetadata(reelId: string): Promise<{
@@ -436,17 +423,6 @@ class VideoDownloadService {
     callbacks?: Pick<DownloadProgressCallbacks, "updateProgress">
   ): Promise<NormalizeResult> {
     return normalizeVideoIfNeeded(buffer, reelId, callbacks);
-  }
-
-  /**
-   * @deprecated Use normalizeVideoIfNeeded instead
-   */
-  async resizeVideoIfNeeded(
-    buffer: Buffer,
-    reelId: string,
-    callbacks?: Pick<DownloadProgressCallbacks, "updateProgress">
-  ): Promise<{ buffer: Buffer; duration: number | null }> {
-    return resizeVideoIfNeeded(buffer, reelId, callbacks);
   }
 }
 
