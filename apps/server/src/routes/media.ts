@@ -221,26 +221,8 @@ app.openapi(uploadMediaRoute, async (c) => {
     const extension = extensionMap[mimeType] || (isImage ? "jpg" : "mp4");
 
     const s3Key = getS3Key("media", `${userId}/${mediaId}`, extension);
-    
-    console.log(`[Upload] Uploading to S3: key=${s3Key}, size=${buffer.length}, mimeType=${mimeType}`);
-    
-    try {
-      await s3Service.uploadFile(s3Key, buffer, mimeType);
-      console.log(`[Upload] S3 upload successful: ${s3Key}`);
-    } catch (error) {
-      console.error(`[Upload] S3 upload failed:`, error);
-      throw error;
-    }
-
+    await s3Service.uploadFile(s3Key, buffer, mimeType);
     const url = getMediaPublicUrl(s3Key);
-    console.log(`[Upload] Generated URL: ${url}`);
-
-    // Verify file was uploaded successfully
-    const fileExists = await s3Service.fileExists(s3Key);
-    console.log(`[Upload] File exists in S3: ${fileExists}`);
-    if (!fileExists) {
-      console.error(`[Upload] WARNING: File was uploaded but doesn't exist in S3!`);
-    }
 
     // TODO: Extract dimensions and duration
     const width = null;
