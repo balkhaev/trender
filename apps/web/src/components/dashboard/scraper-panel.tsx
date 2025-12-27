@@ -338,10 +338,10 @@ export function ScraperPanel() {
               ) : (
                 <Maximize className="mr-2 h-4 w-4" />
               )}
-              Увеличить для Kling
+              Нормализовать все
             </Button>
             <p className="text-center text-[10px] text-muted-foreground">
-              Апскейл видео &lt;720px для Kling API
+              PAR 1:1 + апскейл для Kling API
             </p>
           </div>
 
