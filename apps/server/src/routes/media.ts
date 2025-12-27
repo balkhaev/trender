@@ -160,11 +160,26 @@ const uploadMediaRoute = createRoute({
 app.openapi(uploadMediaRoute, async (c) => {
   try {
     const formData = await c.req.formData();
+    
+    // Debug: log all form data keys
+    console.log("FormData keys:", Array.from(formData.keys()));
+    console.log("FormData entries:", Array.from(formData.entries()).map(([key, val]) => ({
+      key,
+      valueType: typeof val,
+      isBlob: val instanceof Blob,
+    })));
+    
     const file = formData.get("file");
 
     // Check if file exists and is either File or Blob
     if (!file || !(file instanceof Blob)) {
-      return c.json({ error: "File is required" }, 400);
+      return c.json({ 
+        error: "File is required",
+        debug: {
+          formDataKeys: Array.from(formData.keys()),
+          fileExists: !!file,
+        }
+      }, 400);
     }
 
     const mimeType = file.type;
